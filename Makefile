@@ -44,7 +44,7 @@ $(LIBCONVWINOGRAD): $(OBJS)
 #-----------------------------------
 
 clean:
-	rm *.o $(LIBCONVWINOGRAD) 
+	rm -f *.o $(LIBCONVWINOGRAD) 
 
 #-----------------------------------
 
