@@ -28,10 +28,6 @@
    version   = "1.1"
 */
 
-#include <stdio.h>
-#include <math.h>
-#include <string.h>
-
 #include "dtypes.h"
 
 void gemm( char orderA, char orderB, char orderC,
