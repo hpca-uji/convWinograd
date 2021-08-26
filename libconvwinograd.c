@@ -40,7 +40,7 @@
 #include "mkl.h"
 #elif defined(EXTERN_CBLAS)
 #include <cblas.h>
-#else
+#elif !defined(ARM_NEON)
 #include "gemm.h"
 #endif
 

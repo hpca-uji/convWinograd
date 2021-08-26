@@ -7,7 +7,7 @@
 
 CC       = gcc
 CLINKER  = gcc
-CFLAGS   = -fopenmp -O3
+CFLAGS   = -fopenmp -ftree-vectorize -O3
 OBJS     = libconvwinograd.o
 
 UNAME    = $(shell uname -m)
@@ -22,7 +22,8 @@ ifeq ($(UNAME), x86_64)
     DTYPE    = -DFP32 
   endif
 else ifeq ($(UNAME), aarch64)
-    FLAGS    = -DARM_NEON
+    FLAGS    = -DARM_NEON -DEXTERN_CBLAS
+    OPTFLAGS = -lblas
 endif
 
 
@@ -32,7 +33,7 @@ LIBCONVWINOGRAD = libconvwinograd.so
 
 default: $(LIBCONVWINOGRAD)
 
-libconvwinograd.so: $(OBJS)
+$(LIBCONVWINOGRAD): $(OBJS)
 	$(CLINKER) $(OBJS) $(OPTFLAGS) -shared -o $@
 
 #-----------------------------------
