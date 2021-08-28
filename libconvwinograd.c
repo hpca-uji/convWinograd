@@ -144,8 +144,8 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
   ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
   wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
 
-  tile_h = floor(((double) hi + 2 * vpadding - t) / s) + 1;
-  tile_w = floor(((double) wi + 2 * hpadding - t) / s) + 1;
+  tile_h = floor(((double) hi + 2 * vpadding - t) / s) + 1 + hi % 2;
+  tile_w = floor(((double) wi + 2 * hpadding - t) / s) + 1 + wi % 2;
 
   ldU3 = c;
   ldU2 = k*ldU3;
