@@ -92,7 +92,7 @@ inline void fvtrans_float32_4x4_neon_fp32( float32x4_t *A0, float32x4_t *A1, flo
 //   return (double) (tv.tv_sec + tv.tv_usec*1.0e-6);
 // }
 
-void sconv_winograd2x2_3x3_nchw( int n, int k, int c,
+void sconv_winograd_nchw(int m, int r, int n, int k, int c,
                    int hi, int wi, int kh, int kw,
                    int vpadding, int hpadding,
                    float *D, int ldD1, int ldD2, int ldD3,
@@ -104,14 +104,12 @@ void sconv_winograd2x2_3x3_nchw( int n, int k, int c,
                    float *running_mean, float *inv_std, 
                    float *gamma, float *beta)
 {
-  const   int m = 2;         // Winograd output tile size: m x m
-  const   int r = 3;         // Winograd filter size: r x r
-  const   int s = r - 1;     // Winograd sliding window stride
-  const   int t = m + r - 1; // Winograd input tile size: t x t
+  const   int t = m + r - 1;    // Winograd input tile size: t x t
+  const   int s = m;            // Winograd sliding window stride: t - (r - 1) = m
   const   int vstride = 1, hstride = 1;  // Convolution stride needs to be 1
  
   if ((kh != r)||(kw != r)) {
-    printf("*** Error: the kernel size for this version of Winograd should be (3x3)!");
+    printf("*** Error: the kernel size for this version of Winograd is wrong!");
     exit(-1);
   }
 
@@ -146,8 +144,8 @@ void sconv_winograd2x2_3x3_nchw( int n, int k, int c,
   ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
   wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
 
-  tile_h = ceil(((double) hi + 2 * vpadding - t) / m) + 1;
-  tile_w = ceil(((double) wi + 2 * hpadding - t) / m) + 1;
+  tile_h = floor(((double) hi + 2 * vpadding - t) / s) + 1;
+  tile_w = floor(((double) wi + 2 * hpadding - t) / s) + 1;
 
   ldU3 = c;
   ldU2 = k*ldU3;
