@@ -173,7 +173,7 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       U3 =                       W2;
 
       // Scatter result in appropriate entries of U
-      for (i = 0; i < t; i++) {
+      for (i = 0; i < 4; i++) {
         Urow(i, 0, ik, ic) = U0[i];
         Urow(i, 1, ik, ic) = U1[i];
         Urow(i, 2, ik, ic) = U2[i];
@@ -269,7 +269,7 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
           U3 =       W1      - W3;
 
           // Scatter result in appropriate entries of V
-          for (i = 0; i < t; i++) {
+          for (i = 0; i < 4; i++) {
             Vrow(i, 0, ic, in * tile_h * tile_w + ih * tile_w + iw) = U0[i];  
             Vrow(i, 1, ic, in * tile_h * tile_w + ih * tile_w + iw) = U1[i];
             Vrow(i, 2, ic, in * tile_h * tile_w + ih * tile_w + iw) = U2[i];
