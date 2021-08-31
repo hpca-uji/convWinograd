@@ -44,22 +44,6 @@
 #include "gemm.h"
 #endif
 
-#if defined(ARM_NEON)
-#include <arm_neon.h>
-void fvtrans_float32_4x4_neon_fp32( float32x4_t *A0, float32x4_t *A1, float32x4_t *A2, float32x4_t *A3 );
-
-inline void fvtrans_float32_4x4_neon_fp32( float32x4_t *A0, float32x4_t *A1, float32x4_t *A2, float32x4_t *A3 ) {
-  float32x4x2_t V = vtrnq_f32 ( (float32x4_t) vtrn1q_f64 ( (float64x2_t) *A0, (float64x2_t) *A2 ),
-                                (float32x4_t) vtrn1q_f64 ( (float64x2_t) *A1, (float64x2_t) *A3 ));
-  float32x4x2_t W = vtrnq_f32 ( (float32x4_t) vtrn2q_f64 ( (float64x2_t) *A0, (float64x2_t) *A2 ),
-                                (float32x4_t) vtrn2q_f64 ( (float64x2_t) *A1, (float64x2_t) *A3 ));
-  *A0 = V.val[0];
-  *A1 = V.val[1];
-  *A2 = W.val[0];
-  *A3 = W.val[1];
-}
-#endif
-
 #define dabs(a)      ( (a) > 0.0 ? (a) :-(a) )
 #define min(a,b)     ( (a) > (b) ? (b) : (a) )
 #define max(a,b)     ( (a) > (b) ? (a) : (b) )
@@ -78,21 +62,7 @@ inline void fvtrans_float32_4x4_neon_fp32( float32x4_t *A0, float32x4_t *A1, flo
 #define Brow(a1,a2)  B[ (a1)*(ldB)+(a2) ]
 #define Crow(a1,a2)  C[ (a1)*(ldC)+(a2) ]
 
-// double dclock()
-// {
-// /* 
-//  * Timer
-//  *
-//  */
-//   struct timeval  tv;
-//   // struct timezone tz;
-// 
-//   gettimeofday( &tv, NULL );
-// 
-//   return (double) (tv.tv_sec + tv.tv_usec*1.0e-6);
-// }
-
-void sconv_winograd_nchw(int m, int r, int n, int k, int c,
+void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
                    int hi, int wi, int kh, int kw,
                    int vpadding, int hpadding,
                    float *D, int ldD1, int ldD2, int ldD3,
@@ -126,20 +96,7 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
               it1, it2,
               i, j, ho, wo,
               th, tw, e, v;
-  float       d[t*t], Wk[t*t], Uk[t*t];
-
-#if defined(ARM_NEON)
-  float       *Fptr, *dptr, *Mptr, *Wptr;
-  float32x4_t F0, F1, F2, 
-              d0, d1, d2, d3,
-              U0, U1, U2, U3,
-              M0, M1, M2, M3,
-              W0, W1, W2, W3, 
-              Z,
-              zeros = vmovq_n_f32(0.0);
-#else 
-  float       Z[m*m];
-#endif
+  float       d[t*t], Wk[t*t], Uk[t*t], Z[m*m];
 
   ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
   wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
@@ -169,51 +126,7 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
   for (ik = 0; ik < k; ik++)
     for (ic = 0; ic < c; ic++) {
       // U[..., ik, ic] = (G @ F[ik, ic, ...]) @ G.T
-
-#if defined(ARM_NEON)
-      // Load rows of F: 3x3
-      // The following solution is a bit "dirty" because F has 3 elements per row only, 
-      // but we load four to take advantage of vector instructions
-      // This may generate a core dump if we try to access in an illegal position though.
-      // The alternative is to load F2 scalar-wise. (There can be no problem with F0 and F1)
-      Fptr = &Frow(ik,ic,0,0);
-      F0   = vld1q_f32(&Fptr[0]);
-      F1   = vld1q_f32(&Fptr[3]);
-      F2   = vld1q_f32(&Fptr[6]);
-
-      // We are doing extra flops here: each row has only 3 valid elements but we
-      // use vector instructions that operate with 4 values each. For each row/vector register, the last entry
-      // is actually garbage and, therefore, will not used in the subsequent "gemm", when accessing W
-      // Wi  = G_row(i)  *  [ F0;F1;F2 ] (rows of F) with
-      // G = [1.0,  0.0, 0.0,
-      //      0.5,  0.5, 0.5,
-      //      0.5, -0.5, 0.5,
-      //      0.0,  0.0, 1.0];
-      W0 =     F0;
-      W1 = 0.5*F0 + 0.5*F1 + 0.5*F2;
-      W2 = 0.5*F0 - 0.5*F1 + 0.5*F2;
-      W3 =                       F2;
-
-      // Transpose Wk so that
-      // W0, W1, W2, W3 now contain the columns of the previous Wk
-      // Note that, after the transposition, W3 contains garbage
-      // and it will not be used in the subsequent operations
-      fvtrans_float32_4x4_neon_fp32( &W0, &W1, &W2, &W3 );
-
-      // Ui  = G_row(i)  *  [ W0,W1,W2 ] (rows of W/cols of W before transposition)
-      U0 =     W0;
-      U1 = 0.5*W0 + 0.5*W1 + 0.5*W2;
-      U2 = 0.5*W0 - 0.5*W1 + 0.5*W2;
-      U3 =                       W2;
-
-      // Scatter result in appropriate entries of U
-      for (i = 0; i < t; i++) {
-        Urow(i, 0, ik, ic) = U0[i];
-        Urow(i, 1, ik, ic) = U1[i];
-        Urow(i, 2, ik, ic) = U2[i];
-        Urow(i, 3, ik, ic) = U3[i];
-      }
-#elif defined(EXTERN_CBLAS)
+#if defined(EXTERN_CBLAS)
       cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
             t, r, r,
             1.0, G, r,
@@ -224,9 +137,6 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
             1.0, Wk, r,
                  G,  r,
             0.0, Uk, t );
-      for (i = 0; i < t; i++)
-        for (j = 0; j < t; j++)
-          Urow(i, j, ik, ic) = Uk[i * t + j];
 #else
       gemm( 'R', 'R', 'R',
             'N', 'N',
@@ -240,11 +150,10 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
             1.0, Wk, r,
                  G,  r,
             0.0, Uk, t );
+#endif
       for (i = 0; i < t; i++)
         for (j = 0; j < t; j++)
           Urow(i, j, ik, ic) = Uk[i * t + j];
-#endif
-
     }
 
   for (in = 0; in < n; in++)
@@ -302,46 +211,7 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
               d[i * t + j] = 0.0;
           
           // V[..., ic, in * tile_h * tile_w + ih * tile_w + iw] = (Bt @ d) @ Bt.T
-#if defined(ARM_NEON)
-          // Load rows of d: 4x4 (This is much more convenient than the case with 3x3 F.)
-          //
-          // WARNING: We should replace this vector loads with a direct constructions of d from the entries of Drow
-          // and therefore avoid the duplicated memory accesses
-          //
-          dptr = d;
-          d0   = vld1q_f32(&dptr[0]);
-          d1   = vld1q_f32(&dptr[4]);
-          d2   = vld1q_f32(&dptr[8]);
-          d3   = vld1q_f32(&dptr[12]);
-
-          // Wi  = Bt_row(i)  *  [ d0;d1;d2;d3 ] (rows of d), with
-          // Bt = [1.0,  0.0, -1.0,  0.0,
-          //       0.0,  1.0,  1.0,  0.0,
-          //       0.0, -1.0,  1.0,  0.0,
-          //       0.0,  1.0,  0.0, -1.0];
-          W0 =  d0      - d2;
-          W1 =       d1 + d2;
-          W2 =     - d1 + d2;
-          W3 =       d1      - d3;
-
-          // Transpose Wk so that
-          // W0, W1, W2, W3 now contain the columns of the previous Wk
-          fvtrans_float32_4x4_neon_fp32( &W0, &W1, &W2, &W3 );
-          
-          // U_i  = Bt_row(i)  *  [ W0,W1,W2,W3 ] (rows of W/cols of W before transposition)
-          U0 =  W0      - W2;
-          U1 =       W1 + W2;
-          U2 =     - W1 + W2;
-          U3 =       W1      - W3;
-
-          // Scatter result in appropriate entries of V
-          for (i = 0; i < t; i++) {
-            Vrow(i, 0, ic, in * tile_h * tile_w + ih * tile_w + iw) = U0[i];  
-            Vrow(i, 1, ic, in * tile_h * tile_w + ih * tile_w + iw) = U1[i];
-            Vrow(i, 2, ic, in * tile_h * tile_w + ih * tile_w + iw) = U2[i];
-            Vrow(i, 3, ic, in * tile_h * tile_w + ih * tile_w + iw) = U3[i];
-          }
-#elif defined(EXTERN_CBLAS)
+#if defined(EXTERN_CBLAS)
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 t, t, t,
                 1.0, Bt, t,
@@ -352,9 +222,6 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
                 1.0, Wk, t,
                      Bt, t,
                 0.0, Uk, t );
-          for (i = 0; i < t; i++)
-            for (j = 0; j < t; j++)
-               Vrow(i, j, ic, in * tile_h * tile_w + ih * tile_w + iw) = Uk[i * t + j];
 #else
           gemm( 'R', 'R', 'R',
                 'N', 'N',
@@ -368,10 +235,10 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
                 1.0, Wk, t,
                      Bt, t,
                 0.0, Uk, t );
+#endif
           for (i = 0; i < t; i++)
             for (j = 0; j < t; j++)
                Vrow(i, j, ic, in * tile_h * tile_w + ih * tile_w + iw) = Uk[i * t + j];
-#endif
         }
      }
 
@@ -397,10 +264,9 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
 #endif
       for (i = 0; i < (n * tile_h * tile_w); i++)
         for (j = 0; j < k; j++)
-           Mrow(i, j, v, e) = MA2[j * (n * tile_h * tile_w) + i];
+           Mrow(i, j, e, v) = MA2[j * (n * tile_h * tile_w) + i];
     }
 
-  // print_tensor4D( "Mc", t, t, k, (n * tile_h * tile_w), M, ldM1, ldM2, ldM3 );
   for (in = 0; in < n; in++)
     for (ik = 0; ik < k; ik++)
       for (ih = 0; ih < tile_h; ih++)
@@ -409,36 +275,7 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
           // Take advantage that because of the change in the previous block of nested loops, M is now contiguous in memory.
           // Therefore, we are actually computing the following:
           //     Z = (At @ M[in * tile_h * tile_w + ih * tile_w + iw, ik, ...]) @ At.T
-#if defined(ARM_NEON)
-          // Load rows of M: 4x4
-          Mptr = &Mrow(in * tile_h * tile_w + ih * tile_w + iw, ik, 0, 0);
-          M0   = vld1q_f32(&Mptr[0]);
-          M1   = vld1q_f32(&Mptr[4]);
-          M2   = vld1q_f32(&Mptr[8]);
-          M3   = vld1q_f32(&Mptr[12]);
-
-          // W_i  = A_row(i)  *  [ M0;M1;M2;M3 ] (rows of M), with
-          // At  = [1.0, 1.0,  1.0,  0.0, 
-          //        0.0, 1.0, -1.0, -1.0];
-          W0 = M0 + M1 + M2;
-          W1 =      M1 - M2 - M3;
-
-          // In contrast with cases 1) and 2), in this case we do not use vector instructions for this second gemm as
-          // the result is only 2x2 and we would be doing many innecessary flops
-          Z[0] = W0[0] + W0[1] + W0[2];
-          Z[1] =         W0[1] - W0[2] - W0[3];
-          Z[2] = W1[0] + W1[1] + W1[2];
-          Z[3] =         W1[1] - W1[2] - W1[3];
-
-          if ( biases != NULL )
-            Z = Z + biases[ik];
-
-          if ( bn == 'T' )
-            Z = (((Z - running_mean[ik]) * inv_std[ik]) * gamma[ik]) + beta[ik];
-
-          if ( relu == 'T' )
-            Z = vmaxq_f32(Z, zeros);
-#elif defined(EXTERN_CBLAS)
+#if defined(EXTERN_CBLAS)
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 m, t, t,
                 1.0, At, t,
@@ -468,8 +305,7 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
           // Yw[n, k, hh:hh+m, ww:ww+m] = Z[:min(m, H-hh), :min(m, W-ww)]
           for (i = 0; i < min(m, ho-hh); i++)
             for (j = 0; j < min(m, wo-ww); j++) {
-              Yrow(in, ik, hh + i, ww + j) = Z[j * m + i];
-#if !defined(ARM_NEON)
+              Yrow(in, ik, hh + i, ww + j) = Z[i * m + j];
               // We add the biases only if ARM_NEON is not enabled, otherwise bias is added via intrinsics
               if ( biases != NULL )
                 Yrow(in, ik, hh + i, ww + j) += biases[ik];
@@ -479,8 +315,6 @@ void sconv_winograd_nchw(int m, int r, int n, int k, int c,
               // We apply ReLU only if enabled and ARM_NEON is not enabled
               if ( relu == 'T' )
                 Yrow(in, ik, hh + i, ww + j) = max(Yrow(in, ik, hh + i, ww + j), 0);
-#endif
             }
         }
-  // print_tensor4D( "Yc", n, k, h, w, Y, ldY1, ldY2, ldY3 );
 }
