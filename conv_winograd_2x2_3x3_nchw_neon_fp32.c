@@ -300,7 +300,7 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
 #endif
       for (i = 0; i < (n * tile_h * tile_w); i++)
         for (j = 0; j < k; j++)
-           Mrow(i, j, e, v) = MA2[j * (n * tile_h * tile_w) + i];
+           Mrow(i, j, v, e) = MA2[j * (n * tile_h * tile_w) + i];
     }
 
   for (in = 0; in < n; in++)
@@ -346,6 +346,6 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
           // Yw[n, k, hh:hh+m, ww:ww+m] = Z[:min(m, H-hh), :min(m, W-ww)]
           for (i = 0; i < min(m, ho-hh); i++)
             for (j = 0; j < min(m, wo-ww); j++)
-              Yrow(in, ik, hh + i, ww + j) = Z[i * m + j];
+              Yrow(in, ik, hh + i, ww + j) = Z[j * m + i];
         }
 }

@@ -414,7 +414,7 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
 #endif
       for (i = 0; i < (n * tile_h * tile_w); i++)
         for (j = 0; j < k; j++)
-           Mrow(i, j, e, v) = MA2[j * (n * tile_h * tile_w) + i]; 
+           Mrow(i, j, v, e) = MA2[j * (n * tile_h * tile_w) + i];
     }
 
   for (in = 0; in < n; in++)
@@ -498,17 +498,17 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
           hh = ih * s;
           ww = iw * s;
           // Yw[n, k, hh:hh+m, ww:ww+m] = Z[:min(m, H-hh), :min(m, W-ww)]
-          if (0 < min(m, wo-ww))
-            for (i = 0; i < min(m, ho-hh); i++)
-              Yrow(in, ik, hh + i, ww + 0) = Z0[i];
-          if (1 < min(m, wo-ww))
-            for (i = 0; i < min(m, ho-hh); i++)
-              Yrow(in, ik, hh + i, ww + 1) = Z1[i];
-          if (2 < min(m, wo-ww))
-            for (i = 0; i < min(m, ho-hh); i++)
-              Yrow(in, ik, hh + i, ww + 2) = Z2[i];
-          if (3 < min(m, wo-ww))
-            for (i = 0; i < min(m, ho-hh); i++)
-              Yrow(in, ik, hh + i, ww + 3) = Z3[i];
+          if (0 < min(m, ho-hh))
+            for (j = 0; j < min(m, wo-ww); j++)
+              Yrow(in, ik, hh + 0, ww + j) = Z0[j];
+          if (1 < min(m, ho-hh))
+            for (j = 0; j < min(m, wo-ww); j++)
+              Yrow(in, ik, hh + 1, ww + j) = Z1[j];
+          if (2 < min(m, ho-hh))
+            for (j = 0; j < min(m, wo-ww); j++)
+              Yrow(in, ik, hh + 2, ww + j) = Z2[j];
+          if (3 < min(m, ho-hh))
+            for (j = 0; j < min(m, wo-ww); j++)
+              Yrow(in, ik, hh + 3, ww + j) = Z3[j];
         }
 }
