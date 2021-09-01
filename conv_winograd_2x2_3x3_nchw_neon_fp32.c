@@ -155,10 +155,10 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       //      0.5,  0.5, 0.5,
       //      0.5, -0.5, 0.5,
       //      0.0,  0.0, 1.0];
-      W0 =     F0;
-      W1 = 0.5*F0 + 0.5*F1 + 0.5*F2;
-      W2 = 0.5*F0 - 0.5*F1 + 0.5*F2;
-      W3 =                       F2;
+      W0 = F0;
+      W1 = 0.5 * (F0 + F1 + F2);
+      W2 = 0.5 * (F0 - F1 + F2);
+      W3 = F2;
 
       // Transpose Wk so that
       // W0, W1, W2, W3 now contain the columns of the previous Wk
@@ -167,10 +167,10 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       fvtrans_float32_4x4_neon_fp32( &W0, &W1, &W2, &W3 );
 
       // Ui  = G_row(i)  *  [ W0,W1,W2 ] (rows of W/cols of W before transposition)
-      U0 =     W0;
-      U1 = 0.5*W0 + 0.5*W1 + 0.5*W2;
-      U2 = 0.5*W0 - 0.5*W1 + 0.5*W2;
-      U3 =                       W2;
+      U0 = W0;
+      U1 = 0.5 * (W0 + W1 + W2);
+      U2 = 0.5 * (W0 - W1 + W2);
+      U3 = W2;
 
       // Scatter result in appropriate entries of U
       for (i = 0; i < 4; i++) {
