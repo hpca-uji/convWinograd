@@ -194,7 +194,7 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       U04 =                1.0/4.0  * W4[0];
       U05 =                1.0/4.0  * W5[0];
 
-      U1  =        (float)(1.0/6.0) * (-W0 - W1 - W2);
+      U1  =        (float)(1.0/6.0) * (-W0    - W1    - W2);
       U14 =                1.0/6.0  * (-W4[0] - W4[1] - W4[2]);
       U15 =                1.0/6.0  * (-W5[0] - W5[1] - W5[2]);
 
