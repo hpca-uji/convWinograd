@@ -26,7 +26,8 @@ else ifeq ($(UNAME), aarch64)
     FLAGS    = -DARM_NEON -DEXTERN_CBLAS
     OPTFLAGS = -lblas
     OBJS    += conv_winograd_2x2_3x3_nchw_neon_fp32.o \
-               conv_winograd_4x4_3x3_nchw_neon_fp32.o
+               conv_winograd_4x4_3x3_nchw_neon_fp32.o \
+               conv_winograd_2x2_5x5_nchw_neon_fp32.o
 endif
 
 
