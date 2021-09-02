@@ -97,11 +97,11 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
               ldU1, ldU2, ldU3,
               ldV1, ldV2, ldV3,
               ldM1, ldM2, ldM3,
-              it1, it2,
-              i, j, ho, wo,
-              th, tw, e, v;
-  float       d[t*t], Wk[t*t], Uk[t*t],
-              *Fptr, *dptr, *Mptr, *Wptr;
+              i, j, ho, wo, e, v;
+  float       d[t*t], *Fptr, *dptr, *Mptr,
+              U04, U14, U24, U34, U44, U54,
+              U05, U15, U25, U35, U45, U55,
+              W44, W45, W54, W55;
   float32x4_t F0, F1, F2, 
               d0, d1, d2, d3, d4, d5,
               U0, U1, U2, U3, U4, U5,
@@ -110,9 +110,6 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
               Z0, Z1, Z2, Z3,
               W4_, W5_,
               zeros = vmovq_n_f32(0.0);
-  float       U04, U14, U24, U34, U44, U54;
-  float       U05, U15, U25, U35, U45, U55;
-  float       W44, W45, W54, W55;
 
   ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
   wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
