@@ -207,7 +207,7 @@ void conv_winograd_2x2_5x5_nchw_neon_fp32(int m, int r, int n, int k, int c,
 
       U2  = U1  +  (float)(2.0/6.0) * ( W1    + W3);
       U24 = U14 +          2.0/6.0  * ( W4[1] + W4[3]);
-      U25 = U15 +          2.0/6.0  * ( W5[1] + W4[3]);
+      U25 = U15 +          2.0/6.0  * ( W5[1] + W5[3]);
 
       U3  =       (float)(1.0/24.0) * W0    + (float)(1.0/12.0) * W1    + (float)(1.0/6.0) * W2    + (float)(1.0/3.0) * W3    + (float)(2.0/3.0) * W4_;
       U34 =               1.0/24.0  * W4[0] +         1.0/12.0  * W4[1] +         1.0/6.0  * W4[2] +         1.0/3.0  * W4[3] +         2.0/3.0  * W44;
@@ -465,10 +465,6 @@ void conv_winograd_2x2_5x5_nchw_neon_fp32(int m, int r, int n, int k, int c,
           W14 =              Mprow(1,4) - Mprow(2,4) + 2.0*(Mprow(3,4) - Mprow(4,4)) + Mprow(5,4);
           W15 =              Mprow(1,5) - Mprow(2,5) + 2.0*(Mprow(3,5) - Mprow(4,5)) + Mprow(5,5);
 
-          // Transpose Wk so that
-          // W0, W1, W2, W3 now contain the columns of the previous Wk
-          // fvtrans_float32_4x4_neon_fp32( &W0, &W1, &W2, &W3 );
-
           // In contrast with cases 1) and 2), in this case we do not use vector instructions for this second gemm as
           // the result is only 2x2 and we would be doing many innecessary flops
           //    [      1,      1,      1,      1,      1,      0 ]     [ W00,  W10 ]     [ Z00,  Z01 ]
@@ -477,9 +473,10 @@ void conv_winograd_2x2_5x5_nchw_neon_fp32(int m, int r, int n, int k, int c,
           //                                                           [ W03,  W13 ]     
           //                                                           [ W04,  W14 ]
           //                                                           [ W05,  W15 ]
-          Z[0] = W0[0] + W0[1] + W0[2] +       W0[3] +       W04;
+          Z[0] = W0[0] + W0[1] + W0[2] +       W0[3] + W04;
+          Z[2] = W1[0] + W1[1] + W1[2] +       W1[3] + W14;
+
           Z[1] =         W0[1] - W0[2] + 2.0 * W0[3] - 2.0 * W04 + W05;
-          Z[2] = W1[0] + W1[1] + W1[2] +       W1[3] +       W14;
           Z[3] =         W1[1] - W1[2] + 2.0 * W1[3] - 2.0 * W14 + W15;
 
           if ( biases != NULL ) 
