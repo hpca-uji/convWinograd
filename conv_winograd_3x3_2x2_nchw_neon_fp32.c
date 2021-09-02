@@ -100,8 +100,9 @@ void conv_winograd_3x3_2x2_nchw_neon_fp32(int m, int r, int n, int k, int c,
               ldM1, ldM2, ldM3,
               i, j, ho, wo, e, v;
   float       d[t*t],*Fptr, *dptr, *Mptr;
-  float32x4_t F0, F1,
-              d0, d1, d2, d3,
+  float32x2_t F0, F1,
+              W0_, W1_, W2_, W3_;
+  float32x4_t d0, d1, d2, d3,
               U0, U1, U2, U3,
               M0, M1, M2, M3,
               W0, W1, W2, W3 = vmovq_n_f32(0.0),
@@ -142,8 +143,8 @@ void conv_winograd_3x3_2x2_nchw_neon_fp32(int m, int r, int n, int k, int c,
       // This may generate a core dump if we try to access in an illegal position though.
       // The alternative is to load F2 scalar-wise. (There can be no problem with F0 and F1)
       Fptr = &Frow(ik,ic,0,0);
-      F0   = vld1q_f32(&Fptr[0]);
-      F1   = vld1q_f32(&Fptr[2]);
+      F0   = vld1_f32(&Fptr[0]);
+      F1   = vld1_f32(&Fptr[2]);
 
       // We are doing extra flops here: each row has only 2 valid elements but we
       // use vector instructions that operate with 4 values each. For each row/vector register, the last entry
@@ -154,16 +155,18 @@ void conv_winograd_3x3_2x2_nchw_neon_fp32(int m, int r, int n, int k, int c,
       //   [ 1./2.,  1./2. ]  *  [ F10,  F11 ]  =  [ W10,  W11 ]
       //   [ 1./2., -1./2. ]                       [ W20,  W21 ]
       //   [     0,      1 ]                       [ W30,  W31 ]
-      W0   =         F0;
-      W1   =  0.5 * (F0 + F1);
-      W2   =         W1 - F1;
-      W3   =         F1;
+      W0_  =         F0;
+      W1_  =  0.5 * (F0 + F1);
+      W2_  =         W1_ - F1;
+      W3_  =         F1;
 
       // Transpose Wk so that
-      // W0, W1, W2, W3 now contain the columns of the previous Wk
-      // Note that, after the transposition W2 and W3 contains garbage
-      // and it will not be used in the subsequent operations
-      fvtrans_float32_4x4_neon_fp32( &W0, &W1, &W2, &W3 );
+      // W0, W1 now contain the columns of the previous Wk
+      //fvtrans_float32_4x4_neon_fp32( &W0, &W1, &W2, &W3 );
+      W0[0] = W0_[0]; W1[0] = W0_[1];
+      W0[1] = W1_[0]; W1[1] = W1_[1];
+      W0[2] = W2_[0]; W1[2] = W2_[1];
+      W0[3] = W3_[0]; W1[3] = W3_[1];
 
       //   [     1,      0 ]     [ W00,  W10,  W20,  W30 ]     [ U00,  U01,  U02,  U03 ]
       //   [ 1./2.,  1./2. ]  *  [ W01,  W11,  W21,  W31 ]  =  [ U10,  U11,  U12,  U13 ]
