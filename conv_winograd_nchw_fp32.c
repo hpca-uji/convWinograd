@@ -40,7 +40,7 @@
 #include "mkl.h"
 #elif defined(EXTERN_CBLAS)
 #include <cblas.h>
-#elif !defined(ARM_NEON)
+#else
 #include "gemm.h"
 #endif
 
@@ -306,13 +306,10 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
           for (i = 0; i < min(m, ho-hh); i++)
             for (j = 0; j < min(m, wo-ww); j++) {
               Yrow(in, ik, hh + i, ww + j) = Z[j * m + i];
-              // We add the biases only if ARM_NEON is not enabled, otherwise bias is added via intrinsics
               if ( biases != NULL )
                 Yrow(in, ik, hh + i, ww + j) += biases[ik];
-              // We apply BN only if enabled and ARM_NEON is not enabled
               if ( bn == 'T' )
                 Yrow(in, ik, hh + i, ww + j) = (((Yrow(in, ik, hh + i, ww + j) - running_mean[ik]) * inv_std[ik]) * gamma[ik]) + beta[ik];
-              // We apply ReLU only if enabled and ARM_NEON is not enabled
               if ( relu == 'T' )
                 Yrow(in, ik, hh + i, ww + j) = max(Yrow(in, ik, hh + i, ww + j), 0);
             }
