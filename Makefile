@@ -15,7 +15,7 @@ UNAME    = $(shell uname -m)
 ifeq ($(UNAME), x86_64) 
   ifdef MKLROOT
     FLAGS    = -DMKL -DEXTERN_CBLAS
-    OPTFLAGS = -L${MKLROOT}/lib/intel64 -lmkl_rt -Wl,--no-as-needed -lpthread -lm -ldl
+    OPTFLAGS = -L${MKLROOT}/lib/intel64 -lmkl_rt -Wl,--no-as-needed -lpthread -lm -ldl -mavx
     INCLUDE  = -m64  -I"${MKLROOT}/include"
     OBJS    += conv_winograd_nchw_fp32.o
   else
