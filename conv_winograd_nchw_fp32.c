@@ -164,17 +164,17 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
           fw = min(max(-ww_, 0), t);
           ow = max(min(wi - ww, t), 0);
 
-          float d[t*t], Wk[t*t], Uk[t*t];
+          float Wk[t*t], Uk[t*t];
           for (i = 0; i < t; i++)
             for (j = 0; j < t; j++)
-               d[i * t + j] = ((fh <= i && i < oh && fw <= j && j < ow) ? Drow(in, ic, hh + i - fh, ww + j - fw) : 0.0);
+              Uk[i * t + j] = ((fh <= i && i < oh && fw <= j && j < ow) ? Drow(in, ic, hh + i - fh, ww + j - fw) : 0.0);
 
           // V[..., ic, in * tile_h * tile_w + ih * tile_w + iw] = (Bt @ d) @ Bt.T
 #if defined(EXTERN_CBLAS)
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 t, t, t,
                 1.0, Bt, t,
-                     d, t,
+                     Uk, t,
                 0.0, Wk, t );
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 t, t, t,
@@ -186,7 +186,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
                 'N', 'N',
                 t, t, t,
                 1.0, Bt, t,
-                     d, t,
+                     Uk, t,
                 0.0, Wk, t );
           gemm( 'R', 'R', 'R',
                 'N', 'T',
@@ -234,7 +234,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
           float Wk[t*t], Uk[t*t], Z[m*m];
           for (i = 0; i < t; i++)
             for (j = 0; j < t; j++)
-               Uk[j * t + i] = Mrow(i, j, ik, in * tile_h * tile_w + ih * tile_w + iw);
+              Uk[j * t + i] = Mrow(i, j, ik, in * tile_h * tile_w + ih * tile_w + iw);
 #if defined(EXTERN_CBLAS)
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 m, t, t,
