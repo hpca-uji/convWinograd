@@ -87,14 +87,14 @@ void transpose_4x4_vfloat32m1_t(vfloat32m1_t * R0, vfloat32m1_t * R1,
 #define Brow(a1,a2)  B[ (a1)*(ldB)+(a2) ]
 #define Crow(a1,a2)  C[ (a1)*(ldC)+(a2) ]
 
-void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
+void conv_winograd_2x2_3x3_nchw_riscv_fp32(int m, int r, int n, int k, int c,
                    int hi, int wi, int kh, int kw,
                    int vpadding, int hpadding,
                    float *D, int ldD1, int ldD2, int ldD3,
                    float *F, int ldF1, int ldF2, int ldF3,
                    float *Y, int ldY1, int ldY2, int ldY3,
                    float *biases, float *Bt, float *G, float *At,
-                   float *U,  float *V, float *M, float *MA2,
+                   float *U,  float *V, float *M,
                    const char relu, const char bn,
                    float *running_mean, float *inv_std, 
                    float *gamma, float *beta)
@@ -121,12 +121,13 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
                ldM1, ldM2, ldM3,
                i, j, ho, wo, e, v,
                vlength = 4;
-  float        d[t*t], *Fptr, *dptr, *Mptr,
-               init[4] = {0.0,0.0,0.0,0.0},
+  float        *Fptr, init[4] = {0.0, 0.0, 0.0, 0.0},
                *init_ptr = init,
                W00, W01, W02, W03,
                W10, W11, W12, W13,
-               Z_tmp[4];
+               Z_tmp[4],
+               d0_[4], d1_[4], d2_[4], d3_[4],
+               M0_[4], M1_[4], M2_[4], M3_[4];
   size_t       vl =  vsetvl_e32m1(vlength);
   vfloat32m1_t F0, F1, F2,
                d0, d1, d2, d3,
@@ -154,13 +155,6 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
   ldM2 = t*ldM3;
   ldM1 = k*ldM2;
 
-  // This is not necessary as all entries of Y are written after computing the Winograd algorithm
-  // for (ik = 0; ik < k; ik++)
-  //  for (in = 0; in < k; in++)
-  //    for (ih = 0; ih < ho; ih++)
-  //      for (iw = 0; iw < wo; iw++)
-  //        Yrow(in, ik, ih, iw) = 0.0;
- 
   for (ik = 0; ik < k; ik++)
     for (ic = 0; ic < c; ic++) {
       // U[..., ik, ic] = (G @ F[ik, ic, ...]) @ G.T
@@ -201,7 +195,7 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       U3 = W2;
 
       // Scatter result in appropriate entries of U
-      for (i = 0; i < 4; i++) {
+      for (i = 0; i < vl; i++) {
         vsse32_v_f32m1(&Urow(i, 0, ik, ic), 0, U0, i+1);
         vsse32_v_f32m1(&Urow(i, 1, ik, ic), 0, U1, i+1);
         vsse32_v_f32m1(&Urow(i, 2, ik, ic), 0, U2, i+1);
@@ -215,69 +209,28 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
         hh_= min(hi, ih * s - vpadding);
         hh = max(hh_, 0);
         fh = min(max(-hh_, 0), t);
-        oh = max(min(hi - hh, t) - fh, 0);
+        oh = max(min(hi - hh, t), 0);
 
         for (iw = 0; iw < tile_w; iw++) {
           ww_= min(wi, iw * s - hpadding);
           ww = max(ww_, 0);
           fw = min(max(-ww_, 0), t);
-          ow = max(min(wi - ww, t) - fw, 0);
+          ow = max(min(wi - ww, t), 0);
 
-          for (i = 0; i < oh; i++)
-            for (j = 0; j < ow; j++)
-              d[(fh + i) * t + (fw + j)] = Drow(in, ic, hh + i, ww + j);
+          for (j = 0; j < vl; j++) {
+            d0_[j] = ( fh <= 0 && 0 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 0 - fh, ww + j - fw) : 0.0;
+            d1_[j] = ( fh <= 1 && 1 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 1 - fh, ww + j - fw) : 0.0;
+            d2_[j] = ( fh <= 2 && 2 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 2 - fh, ww + j - fw) : 0.0;
+            d3_[j] = ( fh <= 3 && 3 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 3 - fh, ww + j - fw) : 0.0;
+          }
 
-          //   0  0  0
-          //   X  X  X
-          //   X  X  X
-          // if 0 <= fh:
-          //    d[:fh, ...] = 0
-          for (i = 0; i < fh; i++)
-            for (j = 0; j < t; j++)
-              d[i * t + j] = 0.0;
+          d0 = vle32_v_f32m1(&d0_[0], vl);
+          d1 = vle32_v_f32m1(&d1_[0], vl);
+          d2 = vle32_v_f32m1(&d2_[0], vl);
+          d3 = vle32_v_f32m1(&d3_[0], vl);
 
-          //   0  0  0
-          //   X  X  X
-          //   0  0  0
-          // if fh + oh < t:
-          //     d[fh+oh:, ...] = 0
-          for (i = fh + oh; i < t; i++)
-            for (j = 0; j < t; j++)
-              d[i * t + j] = 0.0;
-
-          //   0  0  0
-          //   0  X  X
-          //   0  0  0
-          // if 0 <= fw:
-          //     d[fh:fh+oh, :fw] = 0
-          for (i = fh; i < min(fh+oh, t); i++)
-            for (j = 0; j < fw; j++)
-              d[i * t + j] = 0.0;
-
-          //   0  0  0
-          //   0  X  0
-          //   0  0  0
-          // if fw + ow < t:
-          //     d[fh:fh+oh, fw+ow:] = 0
-          for (i = fh; i < min(fh+oh, t); i++)
-            for (j = fw + ow; j < t; j++)
-              d[i * t + j] = 0.0;
-          
-          // V[..., ic, in * tile_h * tile_w + ih * tile_w + iw] = (Bt @ d) @ Bt.T
-
-          // Load rows of d: 4x4 (This is much more convenient than the case with 3x3 F.)
-          //
-          // WARNING: We should replace this vector loads with a direct constructions of d from the entries of Drow
-          // and therefore avoid the duplicated memory accesses
-          //
-          dptr = d;
-          d0   = vle32_v_f32m1(&dptr[0], vl);
-          d1   = vle32_v_f32m1(&dptr[4], vl);
-          d2   = vle32_v_f32m1(&dptr[8], vl);
-          d3   = vle32_v_f32m1(&dptr[12], vl);
-
-          // Wi  = Bt_row(i)  *  [ d0;d1;d2;d3 ] (rows of d), with
-          // Bt = [1.0,  0.0, -1.0,  0.0,
+          // Wi  = Bt_r w(i)  *  [ d0;d1;d2;d3 ] (rows of d), with
+	  // Bt = [1.0,  0.0, -1.0,  0.0,
           //       0.0,  1.0,  1.0,  0.0,
           //       0.0, -1.0,  1.0,  0.0,
           //       0.0,  1.0,  0.0, -1.0];
@@ -288,7 +241,7 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
 
           // Transpose Wk so that
           // W0, W1, W2, W3 now contain the columns of the previous Wk
-          transpose_4x4_vfloat32m1_t(&W0,  &W1, &W2, &W3 );
+          transpose_4x4_vfloat32m1_t(&W0, &W1, &W2, &W3 );
           
           // U_i  = Bt_row(i)  *  [ W0,W1,W2,W3 ] (rows of W/cols of W before transposition)
           U0 =  W0      - W2;
@@ -297,7 +250,7 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
           U3 =       W1      - W3;
 
           // Scatter result in appropriate entries of V
-          for (i = 0; i < 4; i++) {
+          for (i = 0; i < vl; i++) {
             vsse32_v_f32m1(&Vrow(i, 0, ic, in * tile_h * tile_w + ih * tile_w + iw), 0, U0, i+1);
             vsse32_v_f32m1(&Vrow(i, 1, ic, in * tile_h * tile_w + ih * tile_w + iw), 0, U1, i+1);
             vsse32_v_f32m1(&Vrow(i, 2, ic, in * tile_h * tile_w + ih * tile_w + iw), 0, U2, i+1);
@@ -317,18 +270,15 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
             k, (n * tile_h * tile_w), c,
             1.0, &Urow(e, v, 0, 0), c,
                  &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
-            0.0, MA2, (n * tile_h * tile_w) );
+            0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
 #else
       gemm( 'R', 'R', 'R',
             'N', 'N',
             k, (n * tile_h * tile_w), c,
             1.0, &Urow(e, v, 0, 0), c,
                  &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
-            0.0, MA2, (n * tile_h * tile_w) );
+            0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
 #endif
-      for (i = 0; i < (n * tile_h * tile_w); i++)
-        for (j = 0; j < k; j++)
-           Mrow(i, j, v, e) = MA2[j * (n * tile_h * tile_w) + i];
     }
 
   for (in = 0; in < n; in++)
@@ -341,11 +291,17 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
           //     Z = (At @ M[in * tile_h * tile_w + ih * tile_w + iw, ik, ...]) @ At.T
 
           // Load rows of M: 4x4
-          Mptr = &Mrow(in * tile_h * tile_w + ih * tile_w + iw, ik, 0, 0);
-          M0 = vle32_v_f32m1(&Mptr[0], vl);
-          M1 = vle32_v_f32m1(&Mptr[4], vl);
-          M2 = vle32_v_f32m1(&Mptr[8], vl);
-          M3 = vle32_v_f32m1(&Mptr[12], vl);
+          for (i = 0; i < vl; i++) {
+            M0_[i] = Mrow(i, 0, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M1_[i] = Mrow(i, 1, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M2_[i] = Mrow(i, 2, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M3_[i] = Mrow(i, 3, ik, in * tile_h * tile_w + ih * tile_w + iw);
+          }
+
+          M0 = vle32_v_f32m1(&M0_[0], vl);
+          M1 = vle32_v_f32m1(&M1_[0], vl);
+          M2 = vle32_v_f32m1(&M2_[0], vl);
+          M3 = vle32_v_f32m1(&M3_[0], vl);
 
           // W_i  = A_row(i)  *  [ M0;M1;M2;M3 ] (rows of M), with
           // At  = [1.0, 1.0,  1.0,  0.0, 

@@ -69,7 +69,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
                    float *F, int ldF1, int ldF2, int ldF3,
                    float *Y, int ldY1, int ldY2, int ldY3,
                    float *biases, float *Bt, float *G, float *At,
-                   float *U,  float *V, float *M, float *MA2,
+                   float *U,  float *V, float *M,
                    const char relu, const char bn,
                    float *running_mean, float *inv_std, 
                    float *gamma, float *beta)
@@ -96,7 +96,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
               it1, it2,
               i, j, ho, wo,
               th, tw, e, v;
-  float       d[t*t], Wk[t*t], Uk[t*t], Z[m*m];
+  float       d[t*t], Wk[t*t], Uk[t*t], Z[m*m], *MA2;
 
   ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
   wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
@@ -116,12 +116,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
   ldM2 = t*ldM3;
   ldM1 = k*ldM2;
 
-  // This is not necessary as all entries of Y are written after computing the Winograd algorithm
-  // for (ik = 0; ik < k; ik++)
-  //  for (in = 0; in < k; in++)
-  //    for (ih = 0; ih < ho; ih++)
-  //      for (iw = 0; iw < wo; iw++)
-  //        Yrow(in, ik, ih, iw) = 0.0;
+  MA2 = (float*) malloc((n * tile_h * tile_w) * k * sizeof(float));
  
   for (ik = 0; ik < k; ik++)
     for (ic = 0; ic < c; ic++) {
@@ -162,54 +157,18 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
         hh_= min(hi, ih * s - vpadding);
         hh = max(hh_, 0);
         fh = min(max(-hh_, 0), t);
-        oh = max(min(hi - hh, t) - fh, 0);
+        oh = max(min(hi - hh, t), 0);
 
         for (iw = 0; iw < tile_w; iw++) {
           ww_= min(wi, iw * s - hpadding);
           ww = max(ww_, 0);
           fw = min(max(-ww_, 0), t);
-          ow = max(min(wi - ww, t) - fw, 0);
+          ow = max(min(wi - ww, t), 0);
 
-          for (i = 0; i < oh; i++)
-            for (j = 0; j < ow; j++)
-              d[(fh + i) * t + (fw + j)] = Drow(in, ic, hh + i, ww + j);
-
-          //   0  0  0
-          //   X  X  X
-          //   X  X  X
-          // if 0 <= fh:
-          //    d[:fh, ...] = 0
-          for (i = 0; i < fh; i++)
+          for (i = 0; i < t; i++)
             for (j = 0; j < t; j++)
-              d[i * t + j] = 0.0;
+               d[i * t + j] = ((fh <= i && i < oh && fw <= j && j < ow) ? Drow(in, ic, hh + i - fh, ww + j - fw) : 0.0);
 
-          //   0  0  0
-          //   X  X  X
-          //   0  0  0
-          // if fh + oh < t:
-          //     d[fh+oh:, ...] = 0
-          for (i = fh + oh; i < t; i++)
-            for (j = 0; j < t; j++)
-              d[i * t + j] = 0.0;
-
-          //   0  0  0
-          //   0  X  X
-          //   0  0  0
-          // if 0 <= fw:
-          //     d[fh:fh+oh, :fw] = 0
-          for (i = fh; i < min(fh+oh, t); i++)
-            for (j = 0; j < fw; j++)
-              d[i * t + j] = 0.0;
-
-          //   0  0  0
-          //   0  X  0
-          //   0  0  0
-          // if fw + ow < t:
-          //     d[fh:fh+oh, fw+ow:] = 0
-          for (i = fh; i < min(fh+oh, t); i++)
-            for (j = fw + ow; j < t; j++)
-              d[i * t + j] = 0.0;
-          
           // V[..., ic, in * tile_h * tile_w + ih * tile_w + iw] = (Bt @ d) @ Bt.T
 #if defined(EXTERN_CBLAS)
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
@@ -314,4 +273,5 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
                 Yrow(in, ik, hh + i, ww + j) = max(Yrow(in, ik, hh + i, ww + j), 0);
             }
         }
+  free(MA2);
 }
