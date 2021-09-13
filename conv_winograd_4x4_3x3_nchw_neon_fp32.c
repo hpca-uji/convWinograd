@@ -56,8 +56,8 @@
 #define Vrow(a1,a2,a3,a4)  V[ (a1)*(ldV1)+(a2)*(ldV2)+(a3)*(ldV3)+(a4) ]
 #define Mrow(a1,a2,a3,a4)  M[ (a1)*(ldM1)+(a2)*(ldM2)+(a3)*(ldM3)+(a4) ]
 
-#define drow(a1,a2)  d[ (a1)*(t)+(a2)   ]
-#define Mprow(a1,a2) Mptr[ (a1)*(t)+(a2)   ]
+#define drow(a1,a2)  (( fh <= a1 && a1 < oh && fw <= a2 && a2 < ow ) ? Drow(in, ic, hh + a1 - fh, ww + a2 - fw) : 0.0)
+#define Mprow(a1,a2) Mrow(a2, a1, ik, in * tile_h * tile_w + ih * tile_w + iw)
 #define Acol(a1,a2)  A[ (a2)*(ldA)+(a1) ]
 #define Bcol(a1,a2)  B[ (a2)*(ldB)+(a1) ]
 #define Ccol(a1,a2)  C[ (a2)*(ldC)+(a1) ]
@@ -72,7 +72,7 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
                    float *F, int ldF1, int ldF2, int ldF3,
                    float *Y, int ldY1, int ldY2, int ldY3,
                    float *biases, float *Bt, float *G, float *At,
-                   float *U,  float *V, float *M, float *MA2,
+                   float *U,  float *V, float *M,
                    const char relu, const char bn,
                    float *running_mean, float *inv_std, 
                    float *gamma, float *beta)
@@ -98,7 +98,7 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
               ldV1, ldV2, ldV3,
               ldM1, ldM2, ldM3,
               i, j, ho, wo, e, v;
-  float       d[t*t], *Fptr, *dptr, *Mptr,
+  float       *Fptr,
               U04, U14, U24, U34, U44, U54,
               U05, U15, U25, U35, U45, U55,
               W44, W45, W54, W55;
@@ -125,16 +125,11 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
   ldV2 = c*ldV3;
   ldV1 = t*ldV2;
 
-  ldM3 = t;
-  ldM2 = t*ldM3;
-  ldM1 = k*ldM2;
+  ldM3 = (n * tile_h * tile_w);
+  ldM2 = k*ldM3;
+  ldM1 = t*ldM2;
 
-  // This is not necessary as all entries of Y are written after computing the Winograd algorithm
-  // for (ik = 0; ik < k; ik++)
-  //  for (in = 0; in < k; in++)
-  //    for (ih = 0; ih < ho; ih++)
-  //      for (iw = 0; iw < wo; iw++)
-  //        Yrow(in, ik, ih, iw) = 0.0;
+  #pragma omp parallel for collapse(2) private(ik,ic,Fptr,F0,F1,F2,W0,W1,W2,W3,W4,W5,U0,U1,U2,U3,U4,U5,U04,U05,U14,U15,U24,U25,U34,U35,U44,U45,U54,U55,i)
   for (ik = 0; ik < k; ik++)
     for (ic = 0; ic < c; ic++) {
       // U[..., ik, ic] = (G @ F[ik, ic, ...]) @ G.T
@@ -144,7 +139,7 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       // but we load four to take advantage of vector instructions
       // This may generate a core dump if we try to access in an illegal position though.
       // The alternative is to load F2 scalar-wise. (There can be no problem with F0 and F1)
-      Fptr = &Frow(ik,ic,0,0);
+      Fptr = &Frow(ik, ic, 0, 0);
       F0   = vld1q_f32(&Fptr[0]);
       F1   = vld1q_f32(&Fptr[3]);
       F2   = vld1q_f32(&Fptr[6]);
@@ -235,75 +230,29 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       Urow(5, 4, ik, ic) = U45;
       Urow(5, 5, ik, ic) = U55;
     }
-
+  #pragma omp parallel for collapse(2) private(ic,ih,hh_,hh,fh,oh,iw,ww_,ww,fw,ow,d0,d1,d2,d3,d4,d5,W0,W1,W2,W3,W4,W5,W4_,W5_,U0,U1,U2,U3,U4,U5,U04,U05,U14,U15,U24,U25,U34,U35,U44,U45,U54,U55,i,j)
   for (in = 0; in < n; in++)
     for (ic = 0; ic < c; ic++)
       for (ih = 0; ih < tile_h; ih++) {
         hh_= min(hi, ih * s - vpadding);
         hh = max(hh_, 0);
         fh = min(max(-hh_, 0), t);
-        oh = max(min(hi - hh, t) - fh, 0);
+        oh = max(min(hi - hh, t), 0);
 
         for (iw = 0; iw < tile_w; iw++) {
           ww_= min(wi, iw * s - hpadding);
           ww = max(ww_, 0);
           fw = min(max(-ww_, 0), t);
-          ow = max(min(wi - ww, t) - fw, 0);
+          ow = max(min(wi - ww, t), 0);
 
-          for (i = 0; i < oh; i++)
-            for (j = 0; j < ow; j++)
-              d[(fh + i) * t + (fw + j)] = Drow(in, ic, hh + i, ww + j);
-
-          //   0  0  0
-          //   X  X  X
-          //   X  X  X
-          // if 0 <= fh:
-          //    d[:fh, ...] = 0
-          for (i = 0; i < fh; i++)
-            for (j = 0; j < t; j++)
-              d[i * t + j] = 0.0;
-
-          //   0  0  0
-          //   X  X  X
-          //   0  0  0
-          // if fh + oh < t:
-          //     d[fh+oh:, ...] = 0
-          for (i = fh + oh; i < t; i++)
-            for (j = 0; j < t; j++)
-              d[i * t + j] = 0.0;
-
-          //   0  0  0
-          //   0  X  X
-          //   0  0  0
-          // if 0 <= fw:
-          //     d[fh:fh+oh, :fw] = 0
-          for (i = fh; i < min(fh+oh, t); i++)
-            for (j = 0; j < fw; j++)
-              d[i * t + j] = 0.0;
-
-          //   0  0  0
-          //   0  X  0
-          //   0  0  0
-          // if fw + ow < t:
-          //     d[fh:fh+oh, fw+ow:] = 0
-          for (i = fh; i < min(fh+oh, t); i++)
-            for (j = fw + ow; j < t; j++)
-              d[i * t + j] = 0.0;
-          
-          // V[..., ic, in * tile_h * tile_w + ih * tile_w + iw] = (Bt @ d) @ Bt.T
-
-          // Load rows of d: 6x6
-          //
-          // WARNING: We should replace this vector loads with a direct constructions of d from the entries of Drow
-          // and therefore avoid the duplicated memory accesses
-          //
-          dptr = d;
-          d0   = vld1q_f32(&dptr[0]);
-          d1   = vld1q_f32(&dptr[6]);
-          d2   = vld1q_f32(&dptr[12]);
-          d3   = vld1q_f32(&dptr[18]);
-          d4   = vld1q_f32(&dptr[24]);
-          d5   = vld1q_f32(&dptr[30]);
+          for (j = 0; j < 4; j++) {
+            d0[j] = ( fh <= 0 && 0 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 0 - fh, ww + j - fw) : 0.0;
+            d1[j] = ( fh <= 1 && 1 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 1 - fh, ww + j - fw) : 0.0;
+            d2[j] = ( fh <= 2 && 2 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 2 - fh, ww + j - fw) : 0.0;
+            d3[j] = ( fh <= 3 && 3 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 3 - fh, ww + j - fw) : 0.0;
+            d4[j] = ( fh <= 4 && 4 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 4 - fh, ww + j - fw) : 0.0;
+            d5[j] = ( fh <= 5 && 5 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 5 - fh, ww + j - fw) : 0.0;
+          }
 
           // Wi  = Bt_row(i)  *  [ d0;d1;d2;d3;d4,d5 ] (rows of d), with
           //   [    4,    0,   -5,    0,    1,    0 ]     [  d00,  d01,  d02,  d03 | d04,  d05 ]     [  W00,  W01,  W02,  W03 | W04,  W05 ]
@@ -396,7 +345,7 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
           Vrow(5, 5, ic, in * tile_h * tile_w + ih * tile_w + iw) = U55;
         }
      }
-
+  #pragma omp parallel for collapse(2) private(e,v)
   for (e = 0; e < t; e++)
     for (v = 0; v < t; v++) {
       // M[e, v] = U[e, v] @ V[e, v]
@@ -408,20 +357,17 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
             k, (n * tile_h * tile_w), c,
             1.0, &Urow(e, v, 0, 0), c,
                  &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
-            0.0, MA2, (n * tile_h * tile_w) );
+            0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
 #else
       gemm( 'R', 'R', 'R',
             'N', 'N',
             k, (n * tile_h * tile_w), c,
             1.0, &Urow(e, v, 0, 0), c,
                  &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
-            0.0, MA2, (n * tile_h * tile_w) );
+            0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
 #endif
-      for (i = 0; i < (n * tile_h * tile_w); i++)
-        for (j = 0; j < k; j++)
-           Mrow(i, j, v, e) = MA2[j * (n * tile_h * tile_w) + i];
     }
-
+  #pragma omp parallel for collapse(2) private(in,ik,ih,iw,M0,M1,M2,M3,M4,M5,W0,W1,W2,W3,W4,W5,W4_,W5_,Z0,Z1,Z2,Z3,hh,ww,i,j)
   for (in = 0; in < n; in++)
     for (ik = 0; ik < k; ik++)
       for (ih = 0; ih < tile_h; ih++)
@@ -432,13 +378,14 @@ void conv_winograd_4x4_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
           //     Z = (At @ M[in * tile_h * tile_w + ih * tile_w + iw, ik, ...]) @ At.T
 
           // Load rows of M: 6x6
-          Mptr = &Mrow(in * tile_h * tile_w + ih * tile_w + iw, ik, 0, 0);
-          M0   = vld1q_f32(&Mptr[0]);
-          M1   = vld1q_f32(&Mptr[6]);
-          M2   = vld1q_f32(&Mptr[12]);
-          M3   = vld1q_f32(&Mptr[18]);
-          M4   = vld1q_f32(&Mptr[24]);
-          M5   = vld1q_f32(&Mptr[30]);
+          for (i = 0; i < 4; i++) {
+            M0[i] = Mrow(i, 0, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M1[i] = Mrow(i, 1, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M2[i] = Mrow(i, 2, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M3[i] = Mrow(i, 3, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M4[i] = Mrow(i, 4, ik, in * tile_h * tile_w + ih * tile_w + iw);
+            M5[i] = Mrow(i, 5, ik, in * tile_h * tile_w + ih * tile_w + iw);
+          }
 
           // W_i  = A_row(i)  *  [ M0;M1;M2;M3 ] (rows of M), with
           //    [      1,      1,      1,      1,      1,      0 ]     [ M00,  M01,  M02,  M03 | M04,  M05 ]     [ W00,  W01,  W02,  W03 | W04,  W05 ]

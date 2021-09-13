@@ -30,7 +30,7 @@ ifeq ($(UNAME), x86_64)
   endif
 else ifeq ($(UNAME), aarch64)
     FLAGS    = -DARM_NEON -DEXTERN_CBLAS
-    OPTFLAGS = -lblas
+    OPTFLAGS = -L/home/dolzm/install/blis/lib -lblis -lgomp
     OBJS    += conv_winograd_3x3_2x2_nchw_neon_fp32.o \
                conv_winograd_2x2_3x3_nchw_neon_fp32.o \
                conv_winograd_4x4_3x3_nchw_neon_fp32.o \
