@@ -191,10 +191,10 @@ void conv_winograd_3x3_2x2_nchw_avx_fp32(int m, int r, int n, int k, int c,
           ow = max(min(wi - ww, t), 0);
 
           for (j = 0; j < 4; j++) {
-            d0[j] = (( fh <= 0 && 0 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 0 - fh, ww + j - fw) : 0.0);
-            d1[j] = (( fh <= 1 && 1 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 1 - fh, ww + j - fw) : 0.0);
-            d2[j] = (( fh <= 2 && 2 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 2 - fh, ww + j - fw) : 0.0);
-            d3[j] = (( fh <= 3 && 3 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 3 - fh, ww + j - fw) : 0.0);
+            d0[j] = ( fh <= 0 && 0 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 0 - fh, ww + j - fw) : 0.0;
+            d1[j] = ( fh <= 1 && 1 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 1 - fh, ww + j - fw) : 0.0;
+            d2[j] = ( fh <= 2 && 2 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 2 - fh, ww + j - fw) : 0.0;
+            d3[j] = ( fh <= 3 && 3 < oh && fw <= j && j < ow ) ? Drow(in, ic, hh + 3 - fh, ww + j - fw) : 0.0;
           }
 
           // Wi  = Bt_row(i)  *  [ d0;d1;d2;d3;d4,d5 ] (rows of d), with
@@ -278,7 +278,6 @@ void conv_winograd_3x3_2x2_nchw_avx_fp32(int m, int r, int n, int k, int c,
           W0 = M0 + M1 + M2;
           W1 =      M1 - M2;
           W2 =      M1 + M2 + M3;
-          W3 = _mm_set_ps(0.0, 0.0, 0.0, 0.0);
 
           // Transpose Wk so that
           // W0, W1, W2, W3 now contain the columns of the previous Wk

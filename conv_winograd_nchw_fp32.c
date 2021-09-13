@@ -84,7 +84,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
   }
 
   // Quick return if possible
- if ( (n==0)||(k==0)||(c==0)||
+  if ( (n==0)||(k==0)||(c==0)||
        (hi==0)||(wi==0)||
        (kh==0)||(kw==0) )
     return;
@@ -93,10 +93,9 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
               ldU1, ldU2, ldU3,
               ldV1, ldV2, ldV3,
               ldM1, ldM2, ldM3,
-              it1, it2,
               i, j, ho, wo,
-              th, tw, e, v;
-  float       d[t*t], Wk[t*t], Uk[t*t], Z[m*m], *MA2;
+              e, v;
+  //float       d[t*t], Wk[t*t], Uk[t*t], Z[m*m];
 
   ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
   wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
@@ -112,15 +111,15 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
   ldV2 = c*ldV3;
   ldV1 = t*ldV2;
 
-  ldM3 = t;
-  ldM2 = t*ldM3;
-  ldM1 = k*ldM2;
+  ldM3 = (n * tile_h * tile_w);
+  ldM2 = k*ldM3;
+  ldM1 = t*ldM2;
 
-  MA2 = (float*) malloc((n * tile_h * tile_w) * k * sizeof(float));
- 
+  #pragma omp parallel for collapse(2) private(ik,ic)
   for (ik = 0; ik < k; ik++)
     for (ic = 0; ic < c; ic++) {
       // U[..., ik, ic] = (G @ F[ik, ic, ...]) @ G.T
+      float Wk[t*t], Uk[t*t];
 #if defined(EXTERN_CBLAS)
       cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
             t, r, r,
@@ -150,7 +149,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
         for (j = 0; j < t; j++)
           Urow(i, j, ik, ic) = Uk[i * t + j];
     }
-
+  #pragma omp parallel for collapse(2) private(ic,ih,hh_,hh,fh,oh,iw,ww_,ww,fw,ow,i,j)
   for (in = 0; in < n; in++)
     for (ic = 0; ic < c; ic++)
       for (ih = 0; ih < tile_h; ih++) {
@@ -165,6 +164,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
           fw = min(max(-ww_, 0), t);
           ow = max(min(wi - ww, t), 0);
 
+          float d[t*t], Wk[t*t], Uk[t*t];
           for (i = 0; i < t; i++)
             for (j = 0; j < t; j++)
                d[i * t + j] = ((fh <= i && i < oh && fw <= j && j < ow) ? Drow(in, ic, hh + i - fh, ww + j - fw) : 0.0);
@@ -200,7 +200,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
                Vrow(i, j, ic, in * tile_h * tile_w + ih * tile_w + iw) = Uk[i * t + j];
         }
      }
-
+  #pragma omp parallel for collapse(2) private(e,v)
   for (e = 0; e < t; e++)
     for (v = 0; v < t; v++) {
       // M[e, v] = U[e, v] @ V[e, v]
@@ -212,20 +212,17 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
             k, (n * tile_h * tile_w), c,
             1.0, &Urow(e, v, 0, 0), c,
                  &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
-            0.0, MA2, (n * tile_h * tile_w) );
+            0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
 #else
       gemm( 'R', 'R', 'R',
             'N', 'N',
             k, (n * tile_h * tile_w), c,
             1.0, &Urow(e, v, 0, 0), c,
                  &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
-            0.0, MA2, (n * tile_h * tile_w) );
+            0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
 #endif
-      for (i = 0; i < (n * tile_h * tile_w); i++)
-        for (j = 0; j < k; j++)
-           Mrow(i, j, v, e) = MA2[j * (n * tile_h * tile_w) + i];
     }
-
+  #pragma omp parallel for collapse(2) private(in,ik,ih,iw,hh,ww,i,j)
   for (in = 0; in < n; in++)
     for (ik = 0; ik < k; ik++)
       for (ih = 0; ih < tile_h; ih++)
@@ -234,11 +231,15 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
           // Take advantage that because of the change in the previous block of nested loops, M is now contiguous in memory.
           // Therefore, we are actually computing the following:
           //     Z = (At @ M[in * tile_h * tile_w + ih * tile_w + iw, ik, ...]) @ At.T
+          float Wk[t*t], Uk[t*t], Z[m*m];
+          for (i = 0; i < t; i++)
+            for (j = 0; j < t; j++)
+               Uk[j * t + i] = Mrow(i, j, ik, in * tile_h * tile_w + ih * tile_w + iw);
 #if defined(EXTERN_CBLAS)
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
                 m, t, t,
                 1.0, At, t,
-                     &Mrow(in * tile_h * tile_w + ih * tile_w + iw, ik, 0, 0), t,
+                     Uk, t,
                 0.0, Wk, t );
           cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
                 m, m, t,
@@ -250,7 +251,7 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
                 'N', 'N',
                 m, t, t,
                 1.0, At, t,
-                     &Mrow(in * tile_h * tile_w + ih * tile_w + iw, ik, 0, 0), t,
+                     Uk, t,
                 0.0, Wk, t );
           gemm( 'R', 'R', 'R',
                 'N', 'T',
@@ -273,5 +274,4 @@ void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
                 Yrow(in, ik, hh + i, ww + j) = max(Yrow(in, ik, hh + i, ww + j), 0);
             }
         }
-  free(MA2);
 }
