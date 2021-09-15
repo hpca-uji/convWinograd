@@ -1,47 +1,46 @@
 
-export VARIANT=WINGRD
+VARIANT=WINGRD
 
-export NMIN=16
-export NMAX=18
-export NSTEP=1
+NMIN=16
+NMAX=32
+NSTEP=1
 
-export KMIN=16
-export KMAX=18
-export KSTEP=1
+KMIN=16
+KMAX=32
+KSTEP=1
 
-export CMIN=16
-export CMAX=18
-export CSTEP=1   
+CMIN=16
+CMAX=32
+CSTEP=1   
 
-export HMIN=32
-export HMAX=32
-export HSTEP=1   
+HMIN=32
+HMAX=32
+HSTEP=1   
 
-export WMIN=32
-export WMAX=32
-export WSTEP=1   
+WMIN=32
+WMAX=32
+WSTEP=1   
 
-export RMIN=2
-export RMAX=5
-export RSTEP=1   
+RMIN=2
+RMAX=5
+RSTEP=1   
 
-export SMIN=2 
-export SMAX=5 
-export SSTEP=1   
+SMIN=2 
+SMAX=5 
+SSTEP=1   
 
-export VPADMIN=0
-export VPADMAX=3
-export VPADSTEP=1
+VPADMIN=0
+VPADMAX=3
+VPADSTEP=1
 
-export HPADMIN=0
-export HPADMAX=3
-export HPADSTEP=1   
+HPADMIN=0
+HPADMAX=3
+HPADSTEP=1   
 
 VISUAL=0
 TIMIN=0.0
-TEST=T
+TEST=N
 
-OMP_SET_NUM_THREADS=20
 ./test_winograd.x \
   $VARIANT \
   $NMIN $NMAX $NSTEP \
