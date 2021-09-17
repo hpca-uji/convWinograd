@@ -63,10 +63,12 @@ extern int    print_matrix( char *, char, int, int, DTYPE *, int );
 extern int    generate_tensor4D( int, int, int, int, DTYPE *, int, int, int );
 extern double dclock();
 
-#if __x86_64__
+#if __x86_64__ && __LP64__
 #define VARIANT _avx_
-#elif __aarch64__
+#elif __aarch64__ && __LP64__
 #define VARIANT _neon_
+#elif __riscv && __riscv_xlen==64
+#define VARIANT _riscv_
 #endif
 
 #define CONV_ARGS    int m, int r, int n, int k, int c, \
