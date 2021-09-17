@@ -63,9 +63,9 @@ extern int    print_matrix( char *, char, int, int, DTYPE *, int );
 extern int    generate_tensor4D( int, int, int, int, DTYPE *, int, int, int );
 extern double dclock();
 
-#if ARCH == x86_64
+#if __x86_64__
 #define VARIANT _avx_
-#elif ARCH == aarch64
+#elif __aarch64__
 #define VARIANT _neon_
 #endif
 
@@ -94,7 +94,7 @@ extern double dclock();
 #define DECL_FUNC2(v, a) conv_winograd_ ## v ## _nchw ## a ## fp32(CONV_ARGS)
 #define DECL_FUNC(v, a) DECL_FUNC2(v, a)
 
-#ifdef ARCH
+#ifdef VARIANT
 #define CALL_FUNC2(v, a) conv_winograd_ ## v ## _nchw ## a ## fp32(CONV_PARAMS(v))
 #define CALL_FUNC(v, a) CALL_FUNC2(v, a)
 extern void DECL_FUNC(3x3_2x2, VARIANT);
