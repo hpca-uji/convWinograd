@@ -34,8 +34,6 @@
 #include <math.h>
 #include <string.h>
 
-// #include "dtypes.h"
-
 #if defined(EXTERN_CBLAS)
 #include <cblas.h>
 #elif !defined(ARM_NEON)
@@ -45,28 +43,31 @@
 #include <arm_neon.h>
 #include "neon_utils.h"
 
-#define dabs(a)      ( (a) > 0.0 ? (a) :-(a) )
 #define min(a,b)     ( (a) > (b) ? (b) : (a) )
 #define max(a,b)     ( (a) > (b) ? (a) : (b) )
 
-#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
-#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
-#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
 #define Urow(a1,a2,a3,a4)  U[ (a1)*(ldU1)+(a2)*(ldU2)+(a3)*(ldU3)+(a4) ]
 #define Vrow(a1,a2,a3,a4)  V[ (a1)*(ldV1)+(a2)*(ldV2)+(a3)*(ldV3)+(a4) ]
 #define Mrow(a1,a2,a3,a4)  M[ (a1)*(ldM1)+(a2)*(ldM2)+(a3)*(ldM3)+(a4) ]
 
-#define drow(a1,a2)  (( fh <= a1 && a1 < oh && fw <= a2 && a2 < ow ) ? Drow(in, ic, hh + a1 - fh, ww + a2 - fw) : 0.0)
-#define Mprow(a1,a2) Mrow(a2, a1, ik, in * tile_h * tile_w + ih * tile_w + iw)
-#define Fprow(a1,a2) Fptr[ (a1)*(r)+(a2)   ]
-#define Acol(a1,a2)  A[ (a2)*(ldA)+(a1) ]
-#define Bcol(a1,a2)  B[ (a2)*(ldB)+(a1) ]
-#define Ccol(a1,a2)  C[ (a2)*(ldC)+(a1) ]
-#define Arow(a1,a2)  A[ (a1)*(ldA)+(a2) ]
-#define Brow(a1,a2)  B[ (a1)*(ldB)+(a2) ]
-#define Crow(a1,a2)  C[ (a1)*(ldC)+(a2) ]
-
-void conv_winograd_2x2_5x5_nchw_neon_fp32(int m, int r, int n, int k, int c,
+#ifdef TENSOR_FORMAT_NHWC
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a3)*(ldD2)+(a4)*(ldD3)+(a2) ]
+#define Frow(a1,a2,a3,a4)  F[ (a2)*(ldF1)+(a3)*(ldF2)+(a4)*(ldF3)+(a1) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a3)*(ldY2)+(a4)*(ldY3)+(a2) ]
+#define drow(a1,a2)        (( fh <= a1 && a1 < oh && fw <= a2 && a2 < ow ) ? Drow(in, ic, hh + a1 - fh, ww + a2 - fw) : 0.0)
+#define Mprow(a1,a2)       Mrow(a2, a1, ik, in * tile_h * tile_w + ih * tile_w + iw)
+#define Fprow(a1,a2)       Fptr[ (a1)*(r)+(a2) ]
+void conv_winograd_2x2_5x5_neon_fp32_nhwc
+#else
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
+#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
+#define drow(a1,a2)        (( fh <= a1 && a1 < oh && fw <= a2 && a2 < ow ) ? Drow(in, ic, hh + a1 - fh, ww + a2 - fw) : 0.0)
+#define Mprow(a1,a2)       Mrow(a2, a1, ik, in * tile_h * tile_w + ih * tile_w + iw)
+#define Fprow(a1,a2)       Fptr[ (a1)*(r)+(a2) ]
+void conv_winograd_2x2_5x5_neon_fp32_nchw
+#endif
+                  (int m, int r, int n, int k, int c,
                    int hi, int wi, int kh, int kw,
                    int vpadding, int hpadding,
                    float *D, int ldD1, int ldD2, int ldD3,
@@ -141,11 +142,13 @@ void conv_winograd_2x2_5x5_nchw_neon_fp32(int m, int r, int n, int k, int c,
       // This may generate a core dump if we try to access in an illegal position though.
       // The alternative is to load F2 scalar-wise. (There can be no problem with F0 and F1)
       Fptr = &Frow(ik,ic,0,0);
-      F0   = vld1q_f32(&Fptr[0]);
-      F1   = vld1q_f32(&Fptr[5]);
-      F2   = vld1q_f32(&Fptr[10]);
-      F3   = vld1q_f32(&Fptr[15]);
-      F4   = vld1q_f32(&Fptr[20]);
+      for (j = 0; j < 4; j++) {
+        F0[j] = Frow(ik, ic, 0, j);
+        F1[j] = Frow(ik, ic, 1, j);
+        F2[j] = Frow(ik, ic, 2, j);
+        F3[j] = Frow(ik, ic, 3, j);
+        F4[j] = Frow(ik, ic, 4, j);
+      }
 
       // We are doing extra flops here: each row has only 3 valid elements but we
       // use vector instructions that operate with 4 values each. For each row/vector register, the last entry
@@ -159,22 +162,22 @@ void conv_winograd_2x2_5x5_nchw_neon_fp32(int m, int r, int n, int k, int c,
       //   [ 1./24.,-1./12.,  1./6., -1./3.,  2./3.   ]     [ F40,  F41,  F42,  F43 | F44]     [W40,  W41,  W42,  W43 | W44]
       //   [      0,      0,      0,      0,      1   ]                                        [W50,  W51,  W52,  W53 | W54]
       W0     =           (float)(1.0/4.0) * F0;
-      W4_[0] =                   1.0/4.0  * Fprow(0,4);
+      W4_[0] =                   1.0/4.0  * Frow(ik,ic,0,4);
 
-      W1     =           (float)(1.0/6.0) * (-F0         - F1         - F2         - F3         - F4);
-      W4_[1] =                   1.0/6.0  * (-Fprow(0,4) - Fprow(1,4) - Fprow(2,4) - Fprow(3,4) - Fprow(4,4));
+      W1     =           (float)(1.0/6.0) * (-F0              - F1              - F2              - F3              - F4);
+      W4_[1] =                   1.0/6.0  * (-Frow(ik,ic,0,4) - Frow(ik,ic,1,4) - Frow(ik,ic,2,4) - Frow(ik,ic,3,4) - Frow(ik,ic,4,4));
 
-      W2     = W1     +  (float)(2.0/6.0) * ( F1         + F3);
-      W4_[2] = W4_[1] +          2.0/6.0  * ( Fprow(1,4) + Fprow(3,4));
+      W2     = W1     +  (float)(2.0/6.0) * ( F1              + F3);
+      W4_[2] = W4_[1] +          2.0/6.0  * ( Frow(ik,ic,1,4) + Frow(ik,ic,3,4));
 
-      W3     =          (float)(1.0/24.0) * F0         + (float)(1.0/12.0) * F1         + (float)(1.0/6.0) * F2         + (float)(1.0/3.0) * F3         + (float)(2.0/3.0) * F4;
-      W4_[3] =                  1.0/24.0  * Fprow(0,4) +         1.0/12.0  * Fprow(1,4) +         1.0/6.0  * Fprow(2,4) +         1.0/3.0  * Fprow(3,4) +         2.0/3.0  * Fprow(4,4);
+      W3     =          (float)(1.0/24.0) * F0              + (float)(1.0/12.0) * F1              + (float)(1.0/6.0) * F2              + (float)(1.0/3.0) * F3              + (float)(2.0/3.0) * F4;
+      W4_[3] =                  1.0/24.0  * Frow(ik,ic,0,4) +         1.0/12.0  * Frow(ik,ic,1,4) +         1.0/6.0  * Frow(ik,ic,2,4) +         1.0/3.0  * Frow(ik,ic,3,4) +         2.0/3.0  * Frow(ik,ic,4,4);
 
-      W4     = W3     - (float)(2.0/12.0) * F1         -  (float)(2.0/3.0) * F3;
-      W44    = W4_[3] -         2.0/12.0  * Fprow(1,4) -          2.0/3.0  * Fprow(3,4);
+      W4     = W3     - (float)(2.0/12.0) * F1              -  (float)(2.0/3.0) * F3;
+      W44    = W4_[3] -         2.0/12.0  * Frow(ik,ic,1,4) -          2.0/3.0  * Frow(ik,ic,3,4);
 
       W5     =                              F4;
-      W54    =                              Fprow(4,4);
+      W54    =                              Frow(ik,ic,4,4);
 
       // Transpose Wk so that
       // W0, W1, W2, W3 now contain the columns of the previous Wk

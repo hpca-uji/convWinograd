@@ -34,8 +34,6 @@
 #include <math.h>
 #include <string.h>
 
-// #include "dtypes.h"
-
 #if defined(EXTERN_CBLAS)
 #include <cblas.h>
 #elif !defined(ARM_NEON)
@@ -48,29 +46,27 @@
   #warning No AVX support - will not compile
 #endif
 
-//#define DEBUG
+extern double dclock();
 
-#define dabs(a)      ( (a) > 0.0 ? (a) :-(a) )
 #define min(a,b)     ( (a) > (b) ? (b) : (a) )
 #define max(a,b)     ( (a) > (b) ? (a) : (b) )
 
-#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
-#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
-#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
 #define Urow(a1,a2,a3,a4)  U[ (a1)*(ldU1)+(a2)*(ldU2)+(a3)*(ldU3)+(a4) ]
 #define Vrow(a1,a2,a3,a4)  V[ (a1)*(ldV1)+(a2)*(ldV2)+(a3)*(ldV3)+(a4) ]
 #define Mrow(a1,a2,a3,a4)  M[ (a1)*(ldM1)+(a2)*(ldM2)+(a3)*(ldM3)+(a4) ]
 
-#define Acol(a1,a2)  A[ (a2)*(ldA)+(a1) ]
-#define Bcol(a1,a2)  B[ (a2)*(ldB)+(a1) ]
-#define Ccol(a1,a2)  C[ (a2)*(ldC)+(a1) ]
-#define Arow(a1,a2)  A[ (a1)*(ldA)+(a2) ]
-#define Brow(a1,a2)  B[ (a1)*(ldB)+(a2) ]
-#define Crow(a1,a2)  C[ (a1)*(ldC)+(a2) ]
-
-extern double dclock(); 
-
-void conv_winograd_2x2_3x3_nchw_avx_fp32(int m, int r, int n, int k, int c,
+#ifdef TENSOR_FORMAT_NHWC
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a3)*(ldD2)+(a4)*(ldD3)+(a2) ]
+#define Frow(a1,a2,a3,a4)  F[ (a2)*(ldF1)+(a3)*(ldF2)+(a4)*(ldF3)+(a1) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a3)*(ldY2)+(a4)*(ldY3)+(a2) ]
+void conv_winograd_2x2_3x3_sse_fp32_nhwc
+#else
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
+#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
+void conv_winograd_2x2_3x3_sse_fp32_nchw
+#endif
+                  (int m, int r, int n, int k, int c,
                    int hi, int wi, int kh, int kw,
                    int vpadding, int hpadding,
                    float *D, int ldD1, int ldD2, int ldD3,
@@ -146,9 +142,11 @@ void conv_winograd_2x2_3x3_nchw_avx_fp32(int m, int r, int n, int k, int c,
       // This may generate a core dump if we try to access in an illegal position though.
       // The alternative is to load F2 scalar-wise. (There can be no problem with F0 and F1)
       Fptr = &Frow(ik, ic, 0, 0);
-      F0   = _mm_loadu_ps(&Fptr[0]);
-      F1   = _mm_loadu_ps(&Fptr[3]);
-      F2   = _mm_loadu_ps(&Fptr[6]);
+      for (j = 0; j < 3; j++) {
+        F0[j] = Frow(ik, ic, 0, j);
+        F1[j] = Frow(ik, ic, 1, j);
+        F2[j] = Frow(ik, ic, 2, j);
+      }
 
       // We are doing extra flops here: each row has only 3 valid elements but we
       // use vector instructions that operate with 4 values each. For each row/vector register, the last entry
@@ -246,6 +244,44 @@ void conv_winograd_2x2_3x3_nchw_avx_fp32(int m, int r, int n, int k, int c,
   T2 = t2 - t1;
   t1 = dclock();
 #endif
+/*
+  #define    GRP_COUNT    1
+
+  int    m_[] = {k};
+  int    n_[] = {(n * tile_h * tile_w)};
+  int    k_[] = {c};
+
+  int    lda_[] = {c};
+  int    ldb_[] = {(n * tile_h * tile_w)};
+  int    ldc_[] = {(n * tile_h * tile_w)};
+
+  CBLAS_TRANSPOSE    transA[] = {CblasNoTrans};
+  CBLAS_TRANSPOSE    transB[] = {CblasNoTrans};
+
+  float    alpha[] = {1.0};
+  float    beta_[] = {0.0};
+
+  int    size_per_group[] = {t * t};
+
+  float    *a_array_[t*t], *b_array_[t*t], *c_array_[t*t];
+  for (e = 0; e < t; e++) {
+    for (v = 0; v < t; v++) {
+       a_array_[e * t + v] = &Urow(e, v, 0, 0);
+       b_array_[e * t + v] = &Vrow(e, v, 0, 0);
+       c_array_[e * t + v] = &Mrow(e, v, 0, 0);
+    }
+  }
+  const float **a_array=(const float **)a_array_, **b_array=(const float **)b_array_;
+
+  // Call cblas_dgemm_batch
+  cblas_sgemm_batch ( CblasRowMajor, transA, transB,
+          m_, n_, k_,
+          alpha, a_array, lda_,
+                 b_array, ldb_,
+          beta_, c_array_, ldc_,
+          GRP_COUNT,
+          size_per_group);
+*/
   #pragma omp parallel for collapse(2) private(e,v)
   for (e = 0; e < t; e++)
     for (v = 0; v < t; v++) {

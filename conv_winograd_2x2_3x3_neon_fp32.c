@@ -45,25 +45,25 @@
 #include <arm_neon.h>
 #include "neon_utils.h"
 
-#define dabs(a)      ( (a) > 0.0 ? (a) :-(a) )
 #define min(a,b)     ( (a) > (b) ? (b) : (a) )
 #define max(a,b)     ( (a) > (b) ? (a) : (b) )
 
-#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
-#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
-#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
 #define Urow(a1,a2,a3,a4)  U[ (a1)*(ldU1)+(a2)*(ldU2)+(a3)*(ldU3)+(a4) ]
 #define Vrow(a1,a2,a3,a4)  V[ (a1)*(ldV1)+(a2)*(ldV2)+(a3)*(ldV3)+(a4) ]
 #define Mrow(a1,a2,a3,a4)  M[ (a1)*(ldM1)+(a2)*(ldM2)+(a3)*(ldM3)+(a4) ]
 
-#define Acol(a1,a2)  A[ (a2)*(ldA)+(a1) ]
-#define Bcol(a1,a2)  B[ (a2)*(ldB)+(a1) ]
-#define Ccol(a1,a2)  C[ (a2)*(ldC)+(a1) ]
-#define Arow(a1,a2)  A[ (a1)*(ldA)+(a2) ]
-#define Brow(a1,a2)  B[ (a1)*(ldB)+(a2) ]
-#define Crow(a1,a2)  C[ (a1)*(ldC)+(a2) ]
-
-void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
+#ifdef TENSOR_FORMAT_NHWC
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a3)*(ldD2)+(a4)*(ldD3)+(a2) ]
+#define Frow(a1,a2,a3,a4)  F[ (a2)*(ldF1)+(a3)*(ldF2)+(a4)*(ldF3)+(a1) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a3)*(ldY2)+(a4)*(ldY3)+(a2) ]
+void conv_winograd_2x2_3x3_sse_fp32_nhwc
+#else
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
+#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
+void conv_winograd_2x2_3x3_sse_fp32_nchw
+#endif
+                  (int m, int r, int n, int k, int c,
                    int hi, int wi, int kh, int kw,
                    int vpadding, int hpadding,
                    float *D, int ldD1, int ldD2, int ldD3,
@@ -134,9 +134,11 @@ void conv_winograd_2x2_3x3_nchw_neon_fp32(int m, int r, int n, int k, int c,
       // This may generate a core dump if we try to access in an illegal position though.
       // The alternative is to load F2 scalar-wise. (There can be no problem with F0 and F1)
       Fptr = &Frow(ik,ic,0,0);
-      F0   = vld1q_f32(&Fptr[0]);
-      F1   = vld1q_f32(&Fptr[3]);
-      F2   = vld1q_f32(&Fptr[6]);
+      for (j = 0; j < 3; j++) {
+        F0[j] = Frow(ik, ic, 0, j);
+        F1[j] = Frow(ik, ic, 1, j);
+        F2[j] = Frow(ik, ic, 2, j);
+      }
 
       // We are doing extra flops here: each row has only 3 valid elements but we
       // use vector instructions that operate with 4 values each. For each row/vector register, the last entry

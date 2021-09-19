@@ -34,8 +34,6 @@
 #include <math.h>
 #include <string.h>
 
-// #include "dtypes.h"
-
 #if defined(MKL)
 #include "mkl.h"
 #elif defined(EXTERN_CBLAS)
@@ -44,25 +42,25 @@
 #include "gemm.h"
 #endif
 
-#define dabs(a)      ( (a) > 0.0 ? (a) :-(a) )
 #define min(a,b)     ( (a) > (b) ? (b) : (a) )
 #define max(a,b)     ( (a) > (b) ? (a) : (b) )
 
-#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
-#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
-#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
 #define Urow(a1,a2,a3,a4)  U[ (a1)*(ldU1)+(a2)*(ldU2)+(a3)*(ldU3)+(a4) ]
 #define Vrow(a1,a2,a3,a4)  V[ (a1)*(ldV1)+(a2)*(ldV2)+(a3)*(ldV3)+(a4) ]
 #define Mrow(a1,a2,a3,a4)  M[ (a1)*(ldM1)+(a2)*(ldM2)+(a3)*(ldM3)+(a4) ]
 
-#define Acol(a1,a2)  A[ (a2)*(ldA)+(a1) ]
-#define Bcol(a1,a2)  B[ (a2)*(ldB)+(a1) ]
-#define Ccol(a1,a2)  C[ (a2)*(ldC)+(a1) ]
-#define Arow(a1,a2)  A[ (a1)*(ldA)+(a2) ]
-#define Brow(a1,a2)  B[ (a1)*(ldB)+(a2) ]
-#define Crow(a1,a2)  C[ (a1)*(ldC)+(a2) ]
-
-void conv_winograd_nchw_fp32(int m, int r, int n, int k, int c,
+#ifdef TENSOR_FORMAT_NHWC
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a3)*(ldD2)+(a4)*(ldD3)+(a2) ]
+#define Frow(a1,a2,a3,a4)  F[ (a2)*(ldF1)+(a3)*(ldF2)+(a4)*(ldF3)+(a1) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a3)*(ldY2)+(a4)*(ldY3)+(a2) ]
+void conv_winograd_nhwc_fp32
+#else
+#define Drow(a1,a2,a3,a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
+#define Frow(a1,a2,a3,a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
+#define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
+void conv_winograd_nchw_fp32
+#endif
+                  (int m, int r, int n, int k, int c,
                    int hi, int wi, int kh, int kw,
                    int vpadding, int hpadding,
                    float *D, int ldD1, int ldD2, int ldD3,

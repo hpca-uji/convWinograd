@@ -39,7 +39,7 @@ HPADSTEP=1
 
 VISUAL=0
 TIMIN=0.0
-TEST=N
+TEST=T
 
 ./test_winograd.x \
   $VARIANT \
