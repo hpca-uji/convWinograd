@@ -32,9 +32,10 @@ ifeq ($(UNAME), x86_64)
     OBJS    += conv_winograd_nchw_fp32.o gemm.o
   endif
 else ifeq ($(UNAME), aarch64)
-    FLAGS    = -DARM_NEON -DEXTERN_CBLAS
-    OPTFLAGS = -L/home/dolzm/install/blis/lib -lblis -lgomp -lm
-    OBJS    += conv_winograd_3x3_2x2_neon_fp32_nchw.o \
+    CC       = gcc-10
+    FLAGS    = -DARM_NEON -DEXTERN_CBLAS -DDEBUG ${FILT}
+    OPTFLAGS = -L/home/dolzm/install/blis/lib -L/home/dolzm/software/convwinograd -lblis -lgomp -lm
+    OBJS    += sutils.o conv_winograd_3x3_2x2_neon_fp32_nchw.o \
                conv_winograd_2x2_3x3_neon_fp32_nchw.o \
                conv_winograd_4x4_3x3_neon_fp32_nchw.o \
                conv_winograd_2x2_5x5_neon_fp32_nchw.o \

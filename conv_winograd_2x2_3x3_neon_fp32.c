@@ -45,6 +45,8 @@
 #include <arm_neon.h>
 #include "neon_utils.h"
 
+extern double dclock();
+
 #define min(a,b)     ( (a) > (b) ? (b) : (a) )
 #define max(a,b)     ( (a) > (b) ? (a) : (b) )
 
@@ -104,6 +106,9 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw
               W0, W1, W2, W3, 
               Z,
               zeros = vmovq_n_f32(0.0);
+#ifdef DEBUG
+  double      t1, t2, T1, T2, T3, T4;
+#endif
 
   ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
   wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
@@ -123,6 +128,10 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw
   ldM2 = k*ldM3;
   ldM1 = t*ldM2;
 
+#ifndef NOFILTER
+#ifdef DEBUG
+  t1 = dclock();
+#endif
   #pragma omp parallel for collapse(2) private(ik,ic,Fptr,F0,F1,F2,W0,W1,W2,W3,U0,U1,U2,U3,i)
   for (ik = 0; ik < k; ik++)
     for (ic = 0; ic < c; ic++) {
@@ -173,6 +182,15 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw
         Urow(i, 3, ik, ic) = U3[i];
       }
     }
+#ifdef DEBUG
+  t2 = dclock();
+  T1 = t2 - t1;
+#endif
+#endif
+
+#ifdef DEBUG
+  t1 = dclock();
+#endif
   #pragma omp parallel for collapse(2) private(ic,ih,hh_,hh,fh,oh,iw,ww_,ww,fw,ow,d0,d1,d2,d3,W0,W1,W2,W3,U0,U1,U2,U3,i,j)
   for (in = 0; in < n; in++)
     for (ic = 0; ic < c; ic++)
@@ -224,6 +242,11 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw
           }
         }
      }
+#ifdef DEBUG
+  t2 = dclock();
+  T2 = t2 - t1;
+  t1 = dclock();
+#endif
   #pragma omp parallel for collapse(2) private(e,v)
   for (e = 0; e < t; e++)
     for (v = 0; v < t; v++) {
@@ -232,11 +255,20 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw
       // This is different from Manel's implementation in Python and it means we are actually computing
       //     M[..., e, v] = U[e, v] @ V[e, v]
 #if defined(EXTERN_CBLAS)
-      cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-            k, (n * tile_h * tile_w), c,
-            1.0, &Urow(e, v, 0, 0), c,
-                 &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
-            0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
+      if ( (n * tile_h * tile_w) == 1 ) {
+        cblas_sgemv(CblasRowMajor, CblasNoTrans,
+              k, c,
+              1.0, &Urow(e, v, 0, 0), c,
+                   &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
+              0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
+      }
+      else {
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+              k, (n * tile_h * tile_w), c,
+              1.0, &Urow(e, v, 0, 0), c,
+                   &Vrow(e, v, 0, 0), (n * tile_h * tile_w),
+              0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
+      }
 #else
       gemm( 'R', 'R', 'R',
             'N', 'N',
@@ -246,6 +278,11 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw
             0.0, &Mrow(e, v, 0, 0), (n * tile_h * tile_w) );
 #endif
     }
+#ifdef DEBUG
+  t2 = dclock();
+  T3 = t2 - t1;
+  t1 = dclock();
+#endif
   #pragma omp parallel for collapse(2) private(in,ik,ih,iw,M0,M1,M2,M3,W0,W1,Z,hh,ww,i,j)
   for (in = 0; in < n; in++)
     for (ik = 0; ik < k; ik++)
@@ -293,4 +330,18 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw
             for (j = 0; j < min(m, wo-ww); j++)
               Yrow(in, ik, hh + i, ww + j) = Z[j * m + i];
         }
+#ifdef DEBUG
+  t2 = dclock();
+  T4 = t2 - t1;
+#ifdef NOFILTER
+  float tot = T2 + T3 + T4; T1=0;
+#else
+  float tot = T1 + T2 + T3 + T4;
+#endif
+  char filename[50];
+  sprintf(filename, "%d_%d_%d_%d_%d_%d_%d.2x2_3x3_wino", n, k, c, hi, wi, vpadding, hpadding);
+  FILE *f= fopen(filename, "a");
+  fprintf(f, "%.8f %.8f %.8f %.8f %.8f\n", tot, T1/tot, T2/tot, T3/tot, T4/tot);
+  fclose(f);
+#endif
 }

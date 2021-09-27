@@ -390,11 +390,14 @@ int main(int argc, char *argv[])
              CALL_FUNC(3x3_2x2, VARIANT, nhwc);
         }
         else if (r == 3 && s == 3) {
-        //   m = 2; CALL_FUNC(2x2_3x3, VARIANT);
-           m = 4;
+           m = 2;
            tformat == NCHW ?
-             CALL_FUNC(4x4_3x3, VARIANT, nchw) :
-             CALL_FUNC(4x4_3x3, VARIANT, nhwc);
+             CALL_FUNC(2x2_3x3, VARIANT, nchw) :
+             CALL_FUNC(2x2_3x3, VARIANT, nhwc);
+         //  m = 4;
+         //  tformat == NCHW ?
+         //    CALL_FUNC(4x4_3x3, VARIANT, nchw) :
+         //    CALL_FUNC(4x4_3x3, VARIANT, nhwc);
         }
         else if (r == 5 && s == 5) {
            m = 2;
