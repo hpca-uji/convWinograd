@@ -26,10 +26,11 @@ ifeq ($(UNAME), x86_64)
                conv_winograd_2x2_3x3_sse_fp32_nhwc.o \
                conv_winograd_4x4_3x3_sse_fp32_nhwc.o \
                conv_winograd_2x2_5x5_sse_fp32_nhwc.o \
-               conv_winograd_fp32_nchw.o
+               conv_winograd_fp32_nchw.o \
+               conv_winograd_fp32_nhwc.o
   else
     OPTFLAGS = -lm -lgomp
-    OBJS    += conv_winograd_nchw_fp32.o gemm.o
+    OBJS    += conv_winograd_fp32_nchw.o conv_winograd_fp32_nhwc.o gemm.o
   endif
 else ifeq ($(UNAME), aarch64)
     CC       = gcc-10
@@ -43,7 +44,8 @@ else ifeq ($(UNAME), aarch64)
                conv_winograd_2x2_3x3_neon_fp32_nhwc.o \
                conv_winograd_4x4_3x3_neon_fp32_nhwc.o \
                conv_winograd_2x2_5x5_neon_fp32_nhwc.o \
-               conv_winograd_fp32_nchw.o
+               conv_winograd_fp32_nchw.o \
+               conv_winograd_fp32_nhwc.o
 endif
 
 
