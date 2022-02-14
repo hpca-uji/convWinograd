@@ -1,37 +1,26 @@
-/* 
-   WINOGRAD 
-
-   -----
-
-   WINOGRAD is an implementation of the Winograd-based convolution transform
-
-   -----
-
-   This program is free software: you can redistribute it and/or modify it under
-   the terms of the GNU General Public License as published by the Free Software
-   Foundation, either version 3 of the License, or (at your option) any later
-   version.
-
-   This program is distributed in the hope that it will be useful, but WITHOUT
-   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-   FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-   You should have received a copy of the GNU General Public License along with
-   this program. If not, see <http://www.gnu.org/licenses/>.
-
-   -----
-
-   author    = "Enrique S. Quintana-Orti"
-   contact   = "quintana@disca.upv.es"
-   copyright = "Copyright 2021, Universitat Politecnica de Valencia"
-   license   = "GPLv3"
-   status    = "Production"
-   version   = "1.1"
+/**
+ * This file is part of convwinograd
+ *
+ * An implementation of the Winograd-based convolution transform
+ *
+ * Copyright (C) 2021-22 Universitat Politècnica de València and
+ *                       Universitat Jaume I
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
 */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
-#include <string.h>
 
 #include "dtypes.h"
 
@@ -45,11 +34,11 @@
 void gemm( char orderA, char orderB, char orderC,
            char transA, char transB,
            int m, int n, int k,
-           DTYPE alpha, DTYPE *A, int ldA,
-                        DTYPE *B, int ldB,
+           DTYPE alpha, const DTYPE *A, int ldA,
+                        const DTYPE *B, int ldB,
            DTYPE beta,  DTYPE *C, int ldC ){
    int    ic, jc, pc, i, j, p;
-   DTYPE  zero = 0.0, one = 1.0, tmp;
+   DTYPE  zero = (DTYPE) 0.0, one = (DTYPE) 1.0, tmp;
 
    // Quick return if possible
   if ( (m==0)||(n==0)||(k==0)||((alpha==zero)&&(beta==one)) )
@@ -88,7 +77,7 @@ void gemm( char orderA, char orderB, char orderC,
   if ( (transA=='N')&&(transB=='N') ) {
     for ( j=0; j<n; j++ )
       for ( i=0; i<m; i++ ) {
-        tmp = 0.0;
+        tmp = zero;
         if ( (orderA=='C')&&(orderB=='C') ) {
           for ( p=0; p<k; p++ )
             tmp += Acol(i,p) * Bcol(p,j);
@@ -123,7 +112,7 @@ void gemm( char orderA, char orderB, char orderC,
   else if ( (transA=='N')&&(transB=='T') ) {
     for ( j=0; j<n; j++ )
       for ( i=0; i<m; i++ ) {
-        tmp = 0.0;
+        tmp = zero;
         if ( (orderA=='C')&&(orderB=='C') ) {
           for ( p=0; p<k; p++ )
             tmp += Acol(i,p) * Bcol(j,p);
@@ -158,7 +147,7 @@ void gemm( char orderA, char orderB, char orderC,
   else if ( (transA=='T')&&(transB=='N') ) {
     for ( j=0; j<n; j++ )
       for ( i=0; i<m; i++ ) {
-        tmp = 0.0;
+        tmp = zero;
         if ( (orderA=='C')&&(orderB=='C') ) {
           for ( p=0; p<k; p++ )
             tmp += Acol(p,i) * Bcol(p,j);
@@ -193,7 +182,7 @@ void gemm( char orderA, char orderB, char orderC,
   else if ( (transA=='T')&&(transB=='T') ) {
     for ( j=0; j<n; j++ )
       for ( i=0; i<m; i++ ) {
-        tmp = 0.0;
+        tmp = zero;
         if ( (orderA=='C')&&(orderB=='C') ) {
           for ( p=0; p<k; p++ )
             tmp += Acol(p,i) * Bcol(j,p);

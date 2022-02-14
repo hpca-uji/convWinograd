@@ -1,31 +1,22 @@
-/* 
-   WINOGRAD 
-
-   -----
-
-   WINOGRAD is an implementation of the Winograd-based convolution transform
-
-   -----
-
-   This program is free software: you can redistribute it and/or modify it under
-   the terms of the GNU General Public License as published by the Free Software
-   Foundation, either version 3 of the License, or (at your option) any later
-   version.
-
-   This program is distributed in the hope that it will be useful, but WITHOUT
-   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-   FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-   You should have received a copy of the GNU General Public License along with
-   this program. If not, see <http://www.gnu.org/licenses/>.
-
-   -----
-
-   author    = "Enrique S. Quintana-Orti"
-   contact   = "quintana@disca.upv.es"
-   copyright = "Copyright 2021, Universitat Politecnica de Valencia"
-   license   = "GPLv3"
-   status    = "Production"
-   version   = "1.1"
+/**
+ * This file is part of convwinograd
+ *
+ * An implementation of the Winograd-based convolution transform
+ *
+ * Copyright (C) 2021-22 Universitat Politècnica de València and
+ *                       Universitat Jaume I
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
 */
 
 #include <stdio.h>
@@ -34,16 +25,14 @@
 #include <math.h>
 #include <string.h>
 
-#if defined(EXTERN_CBLAS)
-#include <cblas.h>
-#elif !defined(ARM_NEON)
-#include "gemm.h"
-#endif
+#include "../cblas_headers.h"
 
-#ifdef __AVX__
-  #include <xmmintrin.h>
+#ifdef C_AVX_FOUND
+
+#include <xmmintrin.h>
+
 #else
-  #warning No AVX support - will not compile
+#warning No AVX support - will not compile
 #endif
 
 #define min(a,b)     ( (a) > (b) ? (b) : (a) )
@@ -106,8 +95,8 @@ void conv_winograd_3x3_2x2_sse_fp32_nchw
               Z0, Z1, Z2,
               zeros = _mm_set_ps(0.0, 0.0, 0.0, 0.0);
 
-  ho = floor(((double) hi + 2 * vpadding - kh) / vstride) + 1;
-  wo = floor(((double) wi + 2 * hpadding - kw) / hstride) + 1;
+  ho = (hi + 2 * vpadding - kh) / vstride + 1;
+  wo = (wi + 2 * hpadding - kw) / hstride + 1;
 
   tile_h = ceil(((double) hi + 2 * vpadding - t) / s) + 1;
   tile_w = ceil(((double) wi + 2 * hpadding - t) / s) + 1;
@@ -237,7 +226,7 @@ void conv_winograd_3x3_2x2_sse_fp32_nchw
       // Store M so that the computation in the block of nested loops after the following computation is contiguous
       // This is different from Manel's implementation in Python and it means we are actually computing
       //     M[..., e, v] = U[e, v] @ V[e, v]
-#if defined(EXTERN_CBLAS)
+#if CBLAS_TYPE_CBLAS
       cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
             k, (n * tile_h * tile_w), c,
             1.0, &Urow(e, v, 0, 0), c,

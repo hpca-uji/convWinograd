@@ -1,3 +1,25 @@
+#!/bin/env sh
+
+#
+# This file is part of convwinograd
+#
+# An implementation of the Winograd-based convolution transform
+#
+# Copyright (C) 2021-22 Universitat Politècnica de València and
+#                       Universitat Jaume I
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 VARIANT=WINGRD
 
@@ -41,7 +63,7 @@ VISUAL=0
 TIMIN=5.0
 TEST=T
 
-./test_winograd.x \
+./test_winograd \
   $VARIANT \
   $NMIN $NMAX $NSTEP \
   $KMIN $KMAX $KSTEP \
@@ -52,4 +74,4 @@ TEST=T
   $SMIN $SMAX $SSTEP \
   $VPADMIN $VPADMAX $VPADSTEP \
   $HPADMIN $HPADMAX $HPADSTEP \
-  $VISUAL $TIMIN $TEST \
+  $VISUAL $TIMIN $TEST

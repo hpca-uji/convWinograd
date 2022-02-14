@@ -1,131 +1,146 @@
-/* 
-   Winograd
-
-   -----
-
-   This program is free software: you can redistribute it and/or modify it under
-   the terms of the GNU General Public License as published by the Free Software
-   Foundation, either version 3 of the License, or (at your option) any later
-   version.
-
-   This program is distributed in the hope that it will be useful, but WITHOUT
-   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-   FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-   You should have received a copy of the GNU General Public License along with
-   this program. If not, see <http://www.gnu.org/licenses/>.
-
-   -----
-
-   author    = "Enrique S. Quintana-Orti"
-   contact   = "quintana@disca.upv.es"
-   copyright = "Copyright 2021, Universitat Politecnica de Valencia"
-   license   = "GPLv3"
-   status    = "Production"
-   version   = "1.1"
+/**
+ * This file is part of convwinograd
+ *
+ * An implementation of the Winograd-based convolution transform
+ *
+ * Copyright (C) 2021-22 Universitat Politècnica de València and
+ *                       Universitat Jaume I
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
 */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
+#include <time.h>
 
-#include "dtypes.h"
+#include "../src/dtypes.h"
 
 #define DTYPE float
 
-#define Trow(a1,a2,a3,a4)  T[ (a1)*(ldT1)+(a2)*(ldT2)+(a3)*(ldT3)+(a4) ]
-#define Mcol(a1,a2)  M[ (a2)*(ldM)+(a1) ]
-#define Mrow(a1,a2)  M[ (a1)*(ldM)+(a2) ]
+#define Trow(a1, a2, a3, a4)  T[ (a1)*(ldT1)+(a2)*(ldT2)+(a3)*(ldT3)+(a4) ]
+#define Mcol(a1, a2)  M[ (a2)*(ldM)+(a1) ]
+#define Mrow(a1, a2)  M[ (a1)*(ldM)+(a2) ]
 
-void generate_tensor4D( int m1, int m2, int m3, int m4, DTYPE *T, int ldT1, int ldT2, int ldT3 )
-{
-/*
- * Generate a 4D tensor with random entries
- * T      : Tensor
+/**
+ * Generates a 4D tensor with random entries
  *
+ * @param m1
+ * @param m2
+ * @param m3
+ * @param m4
+ * @param T The 4D tensor
+ * @param ldT1
+ * @param ldT2
+ * @param ldT3
  */
-  int i1, i2, i3, i4;
+void generate_tensor4D(int m1, int m2, int m3, int m4, DTYPE *T, int ldT1, int ldT2, int ldT3) {
+    int i1, i2, i3, i4;
 
-  for ( i1=0; i1<m1; i1++ )
-  for ( i2=0; i2<m2; i2++ )
-  for ( i3=0; i3<m3; i3++ )
-  for ( i4=0; i4<m4; i4++ )
+    for (i1 = 0; i1 < m1; i1++)
+        for (i2 = 0; i2 < m2; i2++)
+            for (i3 = 0; i3 < m3; i3++)
+                for (i4 = 0; i4 < m4; i4++) {
 #if defined(FP16)
-        Trow(i1,i2,i3,i4) = ((((DTYPE) i1*m1+i2)/m1)/m2);
+                    Trow(i1, i2, i3, i4) = (((DTYPE) i1 * m1 + i2) / m1) / m2;
 #else
-        Trow(i1,i2,i3,i4) = ((DTYPE) rand())/RAND_MAX + 1.0;
+                    Trow(i1, i2, i3, i4) = ((DTYPE) rand()) / ((DTYPE) RAND_MAX) + 1.0;
 #endif
-}
-/*===========================================================================*/
-void print_tensor4D( char *name, int m1, int m2, int m3, int m4, DTYPE *T, int ldT1, int ldT2, int ldT3 )
-{
-/*
- * Print a 4D tensor to standard output
- * name   : Label for vector name
- * m      : Dimension
- * v      : Vector
- *
- */
-  int i1, i2, i3, i4;
-
-  for ( i1=0; i1<m1; i1++ )
-  for ( i2=0; i2<m2; i2++ )
-  for ( i3=0; i3<m3; i3++ )
-  for ( i4=0; i4<m4; i4++ )
-#if defined(FP16)
-        printf( "%s[%d,%d,%d,%d] = %8.2e;\n", name, i1, i2, i3, i4, ((double) Trow(i1, i2, i3, i4)) );
-#elif defined(FP32)
-        printf( "%s[%d,%d,%d,%d] = %14.8e;\n", name, i1, i2, i3, i4, ((double) Trow(i1, i2, i3, i4)) );
-#elif defined(FP64)
-        printf( "%s[%d,%d,%d,%d] = %22.16e;\n", name, i1, i2, i3, i4, ((double) Trow(i1, i2, i3, i4)) );
-#endif
+                }
 }
 
-/*===========================================================================*/
-double dclock()
-{
-/* 
- * Timer
+/**
+ * Prints the given 4D tensor to the standard output
  *
+ * @param name Label for the 4D tensor
+ * @param m1
+ * @param m2
+ * @param m3
+ * @param m4
+ * @param T The 4D tensor
+ * @param ldT1
+ * @param ldT2
+ * @param ldT3
  */
-  struct timeval  tv;
-  // struct timezone tz;
+void print_tensor4D(char *name, int m1, int m2, int m3, int m4, DTYPE *T, int ldT1, int ldT2, int ldT3) {
+    int i1, i2, i3, i4;
 
-  gettimeofday( &tv, NULL );   
-
-  return (double) (tv.tv_sec + tv.tv_usec*1.0e-6);
+    for (i1 = 0; i1 < m1; i1++)
+        for (i2 = 0; i2 < m2; i2++)
+            for (i3 = 0; i3 < m3; i3++)
+                for (i4 = 0; i4 < m4; i4++) {
+#if defined(FP16)
+                    printf("%s[%d,%d,%d,%d] = %8.2e;\n", name, i1, i2, i3, i4, ((double) Trow(i1, i2, i3, i4)));
+#elif defined(FP32)
+                    printf("%s[%d,%d,%d,%d] = %14.8e;\n", name, i1, i2, i3, i4, ((double) Trow(i1, i2, i3, i4)));
+#elif defined(FP64)
+                    printf("%s[%d,%d,%d,%d] = %22.16e;\n", name, i1, i2, i3, i4, ((double) Trow(i1, i2, i3, i4)));
+#endif
+                }
 }
-/*===========================================================================*/
-void print_matrix( char *name, char orderM, int m, int n, DTYPE *M, int ldM )
-{
-/*
- * Print a matrix to standard output
- * name   : Label for matrix name
- * m      : Row dimension
- * n      : Column dimension
- * A      : Matrix
+
+/**
+ * Provides the number of seconds and nanoseconds from a point in the past as a double
  *
+ * @return The number of seconds and nanoseconds from a point in the past
  */
-  int i, j;
-  
-  if ( orderM=='C' )
-    for ( j=0; j<n; j++ ) 
-      for ( i=0; i<m; i++ )
+double dclock() {
+    /*
+     * From man gettimeofday:
+     *
+     *  The  time returned by gettimeofday() is affected by discontinuous jumps in the system time (e.g., if the system
+     *  administrator manually changes the system time).  If you need a monotonically increasing clock,
+     *  see clock_gettime(2).
+     *
+     */
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+    return (double) tp.tv_sec + (double) tp.tv_nsec * 1.0e-9;
+}
+
+/**
+ * Prints a matrix to the standard output
+ *
+ * @param name Label for the matrix
+ * @param orderM
+ * @param m Number of rows
+ * @param n Number of columns
+ * @param M The matrix
+ * @param ldM
+ */
+void print_matrix(char *name, char orderM, int m, int n, DTYPE *M, int ldM) {
+    int i, j;
+
+    if (orderM == 'C')
+        for (j = 0; j < n; j++)
+            for (i = 0; i < m; i++) {
 #if defined(FP16)
-        printf( "%s[%d,%d] = %8.2e;\n", name, i, j, ((double) Mcol(i,j)) );
-#elif defined(FP32)
-        printf( "%s[%d,%d] = %14.8e;\n", name, i, j, ((double) Mcol(i,j)) );
+                printf("%s[%d,%d] = %8.2e;\n", name, i, j, ((double) Mcol(i, j)));
+#elif defined(FP323)
+                printf("%s[%d,%d] = %14.8e;\n", name, i, j, ((double) Mcol(i, j)));
 #elif defined(FP64)
-        printf( "%s[%d,%d] = %22.16e;\n", name, i, j, ((double) Mcol(i,j)) );
+                printf("%s[%d,%d] = %22.16e;\n", name, i, j, ((double) Mcol(i, j)));
 #endif
-  else
-    for ( j=0; j<n; j++ ) 
-      for ( i=0; i<m; i++ )
+            }
+    else
+        for (j = 0; j < n; j++)
+            for (i = 0; i < m; i++) {
 #if defined(FP16)
-        printf( "%s[%d,%d] = %8.2e;\n", name, i, j, ((double) Mrow(i,j)) );
+                printf("%s[%d,%d] = %8.2e;\n", name, i, j, ((double) Mrow(i, j)));
 #elif defined(FP32)
-        printf( "%s[%d,%d] = %14.8e;\n", name, i, j, ((double) Mrow(i,j)) );
+                printf("%s[%d,%d] = %14.8e;\n", name, i, j, ((double) Mrow(i, j)));
 #elif defined(FP64)
-        printf( "%s[%d,%d] = %22.16e;\n", name, i, j, ((double) Mrow(i,j)) );
+                printf("%s[%d,%d] = %22.16e;\n", name, i, j, ((double) Mrow(i, j)));
 #endif
+            }
 }
 

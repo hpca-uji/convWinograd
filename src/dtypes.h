@@ -6,7 +6,6 @@
 #elif defined(FP32)
   #define DTYPE float
   #define gemm_microkernel_Cresident_neon_4x4_prefetch gemm_microkernel_Cresident_neon_4x4_prefetch_fp32
-  #define gemm_microkernel_Cresident_neon_4x4_prefetch_unroll gemm_microkernel_Cresident_neon_4x4_prefetch_unroll_fp32
   #define gemm_microkernel_Cresident_neon_8x8_prefetch gemm_microkernel_Cresident_neon_8x8_prefetch_fp32
   #define gemm_microkernel_ABresident_neon_4x4         gemm_microkernel_ABresident_neon_4x4_fp32
 #elif defined(FP64)
