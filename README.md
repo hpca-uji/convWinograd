@@ -21,22 +21,23 @@ PATH where ``lib/libconvWinograd.so`` should be installed. This last option is o
 should be installed on a prefix PATH different of ``/usr/local``.
 
 As for the ``BLA_VENDOR`` option, the convWinograd library can use a CBLAS library or a bundled, but suboptimal,
-implementation of the GEMM operation. To specify the CBLAS vendor to be used, the ``BLA_VENDOR`` definition can be set
-to one of the next:
+implementation of the GEMM operation. To specify the CBLAS vendor to be used, the ``BLA_VENDOR`` option can be set to
+one of:
 
-    * ``FLAME``: BLIS framework.
-    * ``Intel10_64ilp``: Intel MKL v10+ 64 bit, threaded code, ilp64 model.
-    * ``None``: The provided suboptimal GEMM.
+* ``FLAME``: BLIS framework.
+* ``Intel10_64ilp``: Intel MKL v10+ 64 bit, threaded code, ilp64 model.
+* ``None``: The provided suboptimal GEMM.
 
 If ``BLA_VENDOR`` is not set, all supported BLAS vendors will be tried in the order specified above.
 
-Please note that in order to be able to detect a CBLAS library locally installed, in a prefix path different for where
-the convWinograd library is going to be installed, the directory of this CBLAS library should be added to
-the ``LD_LIBRARY_PATH`` environment variable.
+Please note that in order to find a CBLAS library installed locally, with a prefix path different of the one where the
+convWinograd library is going to be installed, the CBLAS library directory should be added to the ``LD_LIBRARY_PATH``
+environment variable.
 
 Be aware that a cmake system installation could favor those libraries installed by the distribution package manager,
-ignoring CBLAS libraries manually installed. If this is the case, i.e., the specified ``BLA_VENDOR`` option is ignored,
-a local version of cmake should be installed from ``https://cmake.org/download/``.
+thus ignoring those CBLAS libraries that have been manually installed. If this is the case, i.e., the
+specified ``BLA_VENDOR`` option is ignored, a local version of cmake should be used (it can be installed
+from <https://cmake.org/download/>).
 
 Furthermore, if the CBLAS library is found but not its corresponding header (i.e., ``mkl.h`` of``cblas.h`` can not be
 found), the ``-D CMAKE_PREFIX_PATH=CBLAS_INCLUDE_PREFIX`` should be added to the ``cmake ..``
