@@ -513,7 +513,7 @@ void conv_winograd_2x2_3x3_avx512_fp32_nchw
 #else
     conv_winograd_2x2_3x3_avx512_fp32_nchw_pre
 #endif
-       (m, r, n, k, c, kh, kw, F, ldF1, ldF2, ldF3, U);
+        (m, r, n, k, c, kh, kw, F, ldF1, ldF2, ldF3, U);
 
 #ifdef TENSOR_FORMAT_NHWC
     conv_winograd_2x2_3x3_avx512_fp32_nhwc_post
