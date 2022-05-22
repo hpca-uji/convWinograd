@@ -36,6 +36,7 @@ if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         add_compile_options(-DC_AVX_FOUND ${C_AVX_FLAGS})
     endif ()
     add_subdirectory(sse)
+    add_subdirectory(avx)
     target_sources(convwinograd PUBLIC ${LIBSOURCES})
     #
 elseif (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")

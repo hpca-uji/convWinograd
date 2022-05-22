@@ -52,6 +52,8 @@ extern double dclock();
 
 #if __x86_64__ && __LP64__
 #define VARIANT sse
+#define VARIANTAVX avx
+#define VARIANTAVX512 avx512
 #elif __aarch64__ && __LP64__
 #define VARIANT neon
 #elif __riscv && __riscv_xlen==64
@@ -88,20 +90,31 @@ extern double dclock();
 #define CALL_FUNC(v, a, f) CALL_FUNC2(v, a, f)
 
 extern void DECL_FUNC(3x3_2x2, VARIANT, nchw);
-
 extern void DECL_FUNC(2x2_3x3, VARIANT, nchw);
-
 extern void DECL_FUNC(4x4_3x3, VARIANT, nchw);
-
 extern void DECL_FUNC(2x2_5x5, VARIANT, nchw);
-
 extern void DECL_FUNC(3x3_2x2, VARIANT, nhwc);
-
 extern void DECL_FUNC(2x2_3x3, VARIANT, nhwc);
-
 extern void DECL_FUNC(4x4_3x3, VARIANT, nhwc);
-
 extern void DECL_FUNC(2x2_5x5, VARIANT, nhwc);
+#if __x86_64__ && __LP64__ 
+extern void DECL_FUNC(3x3_2x2, VARIANTAVX, nchw);
+extern void DECL_FUNC(2x2_3x3, VARIANTAVX, nchw);
+extern void DECL_FUNC(4x4_3x3, VARIANTAVX, nchw);
+extern void DECL_FUNC(2x2_5x5, VARIANTAVX, nchw);
+extern void DECL_FUNC(3x3_2x2, VARIANTAVX, nhwc);
+extern void DECL_FUNC(2x2_3x3, VARIANTAVX, nhwc);
+extern void DECL_FUNC(4x4_3x3, VARIANTAVX, nhwc);
+extern void DECL_FUNC(2x2_5x5, VARIANTAVX, nhwc);
+extern void DECL_FUNC(3x3_2x2, VARIANTAVX512, nchw);
+extern void DECL_FUNC(2x2_3x3, VARIANTAVX512, nchw);
+extern void DECL_FUNC(4x4_3x3, VARIANTAVX512, nchw);
+extern void DECL_FUNC(2x2_5x5, VARIANTAVX512, nchw);
+extern void DECL_FUNC(3x3_2x2, VARIANTAVX512, nhwc);
+extern void DECL_FUNC(2x2_3x3, VARIANTAVX512, nhwc);
+extern void DECL_FUNC(4x4_3x3, VARIANTAVX512, nhwc);
+extern void DECL_FUNC(2x2_5x5, VARIANTAVX512, nhwc);
+#endif
 
 #else
 #define CALL_FUNC2(v, a, f) conv_winograd_fp32_ ## f ## (CONV_PARAMS(v))
@@ -124,7 +137,7 @@ int main(int argc, char *argv[]) {
     char test;
     char *variant;
     DTYPE *D, *F, *Y, *Yg, *U, *V, *M;
-    double t1, t2, time, tmin, error, nrm, tmp, errorthd, flops, GFLOPS;
+    double t1, t2, time, time_alg, time_avx, time_avx512, tmin, error, nrm, tmp, errorthd, flops, GFLOPS, speedupavx_avg = 0, speedupavx512_avg = 0, cnt=0;
     int m, t, tmin_,
             nmin, nmax, nstep,
             kmin, kmax, kstep,
@@ -264,16 +277,30 @@ int main(int argc, char *argv[]) {
     tmin = atof(argv[30]);
     test = argv[31][0];
 
+#if __x86_64__ && __LP64__
+    printf("# ====================================================================================================================================================");
+    if (test == 'T') printf("========");
+    printf("\n");
+    printf("# Driver for the evaluation of Winograd\n");
+    printf("# ====================================================================================================================================================");
+    if (test == 'T') printf("========");
+    printf("\n");
+    printf("#    variant     n     k     c     h     w    kh    kw  vpad  hpad  format   Time-SSE   Time-AVX  Time-AVX512  SSE/AVX  SSE/AVX512    GFLOPS     Error");
+   // printf("      WINGRD     1     1     1   110   110     3     3     1     1    NCHW   2.03e-04   1.60e-04     1.75e-04    1.27       1.16  1.07e+00  9.90e-08   [OK]");
+    if (test == 'T') printf("  Status");
+    printf("\n");
+#else
     printf("# =======================================================================================================");
-    if (test == 'T') printf("=======");
+    if (test == 'T') printf("========");
     printf("\n");
     printf("# Driver for the evaluation of Winograd\n");
     printf("# =======================================================================================================");
-    if (test == 'T') printf("=======");
+    if (test == 'T') printf("========");
     printf("\n");
     printf("#    variant     n     k     c     h     w    kh    kw  vpad  hpad  format       Time    GFLOPS     Error");
-    if (test == 'T') printf(" Status");
+    if (test == 'T') printf("  Status");
     printf("\n");
+#endif
 
     // Allocate space for data
     // printf("# -->Allocate data\n"); fflush(stdout);
@@ -317,7 +344,8 @@ int main(int argc, char *argv[]) {
                             // for ( s=smin; s<=smax; s+=sstep ){
                             for (vpadding = vpaddingmin; vpadding <= vpaddingmax; vpadding += vpaddingstep) {
                                 for (hpadding = hpaddingmin; hpadding <= hpaddingmax; hpadding += hpaddingstep) {
-                                    for (tformat = tformatmin; tformat < tformatmax; tformat += 1) {
+                                  //  for (tformat = tformatmin; tformat < tformatmax; tformat += 1) {
+                                    for (tformat = tformatmin; tformat < 1; tformat += 1) {
                                         s = r;
                                         //hpadding = vpadding;
                                         // Generate random data
@@ -370,21 +398,8 @@ int main(int argc, char *argv[]) {
                                             }
                                         }
 
-                                        // Set result to zeros
-                                        for (in = 0; in < n; in++)
-                                            for (ik = 0; ik < k; ik++)
-                                                for (ih = 0; ih < ho; ih++)
-                                                    for (iw = 0; iw < wo; iw++) {
-                                                        if (tformat == NCHW) Yrow_nchw(in, ik, ih, iw) = 0.0;
-                                                        else
-                                                            Yrow_nhwc(in, ik, ih, iw) = 0.0;
-                                                        if (test == 'T') {
-                                                            if (tformat == NCHW) Ygrow_nchw(in, ik, ih, iw) = 0.0;
-                                                            else
-                                                                Ygrow_nhwc(in, ik, ih, iw) = 0.0;
-                                                        }
-                                                    }
-
+                                        memset(Y, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
+                                        memset(Yg, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
                                         // printf("# -->Solve problem\n"); fflush(stdout);
 
                                         time = 0.0;
@@ -422,8 +437,80 @@ int main(int argc, char *argv[]) {
                                             t2 = dclock();
                                             time = (t2 > t1 ? t2 - t1 : 0.0);
                                         }
-                                        time = time / nreps;
+                                        time_alg = time / nreps;
                                         if (nreps == 0) continue;
+
+#if __x86_64__ && __LP64__
+                                        memset(Y, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
+                                        memset(Yg, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
+                                        memset(U, 0, t * t * kmax * cmax * sizeof(DTYPE));
+                                        memset(V, 0, t * t * cmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
+                                        memset(M, 0, t * t * kmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
+
+                                        time = 0.0;
+                                        t1 = dclock();
+                                        nreps = 0;
+                                        while (time <= tmin) {
+                                            // Winograd
+                                            if (strcmp(variant, "WINGRD\0") == 0) {
+                                                if (r == 3 && s == 3) {
+                                                    m = 2;
+                                                    tformat == NCHW ?
+                                                    CALL_FUNC(2x2_3x3, VARIANTAVX, nchw) :
+                                                    CALL_FUNC(2x2_3x3, VARIANTAVX, nhwc);
+                                                } else if (r == 5 && s == 5) {
+                                                    m = 2;
+                                                    tformat == NCHW ?
+                                                    CALL_FUNC(2x2_5x5, VARIANTAVX, nchw) :
+                                                    CALL_FUNC(2x2_5x5, VARIANTAVX, nhwc);
+                                                } else break;
+                                            } else {
+                                                printf("Error: Unknown variant %s\n", variant);
+                                                exit(-1);
+                                            }
+                                            nreps++;
+
+                                            t2 = dclock();
+                                            time = (t2 > t1 ? t2 - t1 : 0.0);
+                                        }
+                                        time_avx = time / nreps;
+                                        if (nreps == 0) continue;
+
+                                        memset(Y, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
+                                        memset(Yg, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
+                                        memset(U, 0, t * t * kmax * cmax * sizeof(DTYPE));
+                                        memset(V, 0, t * t * cmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
+                                        memset(M, 0, t * t * kmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
+
+                                        time = 0.0;
+                                        t1 = dclock();
+                                        nreps = 0;
+                                        while (time <= tmin) {
+                                            // Winograd
+                                            if (strcmp(variant, "WINGRD\0") == 0) {
+                                                if (r == 3 && s == 3) {
+                                                    m = 2;
+                                                    tformat == NCHW ?
+                                                    CALL_FUNC(2x2_3x3, VARIANTAVX512, nchw) :
+                                                    CALL_FUNC(2x2_3x3, VARIANTAVX512, nhwc);
+                                                } else if (r == 5 && s == 5) {
+                                                    m = 2;
+                                                    tformat == NCHW ?
+                                                    CALL_FUNC(2x2_5x5, VARIANTAVX512, nchw) :
+                                                    CALL_FUNC(2x2_5x5, VARIANTAVX512, nhwc);
+                                                } else break;
+                                            } else {
+                                                printf("Error: Unknown variant %s\n", variant);
+                                                exit(-1);
+                                            }
+                                            nreps++;
+
+                                            t2 = dclock();
+                                            time = (t2 > t1 ? t2 - t1 : 0.0);
+                                        }
+                                        time_avx512 = time / nreps;
+                                        if (nreps == 0) continue;
+#endif
 
                                         // Test result
                                         if (test == 'T') {
@@ -477,15 +564,25 @@ int main(int argc, char *argv[]) {
                                         //printf("-->Results\n");
                                         //printf("   Time         = %12.6e seg.\n", time  );
                                         flops = 2.0 * n * k * c * h * w * r * s;
-                                        GFLOPS = flops / (1.0e+9 * time);
+                                        GFLOPS = flops / (1.0e+9 * time_alg);
                                         //printf("   GFLOPs       = %12.6e     \n", GFLOPS  );
-                                        printf("      %6s %5d %5d %5d %5d %5d %5d %5d %5d %5d %7s %10.2e %9.2e %9.2e",
+
+#if __x86_64__ && __LP64__
+                                        printf("      %6s %5d %5d %5d %5d %5d %5d %5d %5d %5d %7s %10.2e %10.2e %12.2e %8.2f %11.2f %9.2e %9.2e",
+                                               variant, n, k, c, h, w, r, s, vpadding, hpadding,
+                                               (tformat == NCHW) ? "NCHW" : "NHWC", time_alg, time_avx, time_avx512, time_alg/time_avx, time_alg/time_avx512, GFLOPS, error);
+                                        speedupavx_avg = (speedupavx_avg * cnt + time_alg/time_avx) / (cnt + 1);
+                                        speedupavx512_avg = (speedupavx512_avg * cnt + time_alg/time_avx512) / (cnt + 1);
+                                        cnt++;
+#else
+                                        printf("      %6s %5d %5d %5d %5d %5d %5d %5d %5d %5d %7s %10.2e %10.2f %9.2e %9.2e",
                                                variant, n, k, c, h, w, r, s, vpadding, hpadding,
                                                (tformat == NCHW) ? "NCHW" : "NHWC", time, GFLOPS, error);
+#endif
                                         if (error < errorthd)
-                                            printf("   [OK]");
+                                            printf("    [OK]");
                                         else
-                                            printf(" ******");
+                                            printf("  ******");
                                         printf("\n");
 
                                     }
@@ -511,6 +608,10 @@ int main(int argc, char *argv[]) {
     printf("# =======================================================================================================");
     if (test == 'T') printf("=======");
     printf("\n");
+#if __x86_64__ && __LP64__
+    printf("Speedup AVX256: %10.2f\n", speedupavx_avg);
+    printf("Speedup AVX512: %10.2f\n", speedupavx512_avg);
+#endif
 
     return 0;
 }

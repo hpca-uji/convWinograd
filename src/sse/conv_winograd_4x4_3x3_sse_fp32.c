@@ -50,27 +50,21 @@ extern double dclock();
 #define Yrow(a1,a2,a3,a4)  Y[ (a1)*(ldY1)+(a3)*(ldY2)+(a4)*(ldY3)+(a2) ]
 #define drow(a1,a2)        (( fh <= a1 && a1 < oh && fw <= a2 && a2 < ow ) ? Drow(in, ic, hh + a1 - fh, ww + a2 - fw) : 0.0)
 #define Mprow(a1,a2)       Mrow(a2, a1, ik, in * tile_h * tile_w + ih * tile_w + iw)
-void conv_winograd_4x4_3x3_sse_fp32_nhwc
 #else
 #define Drow(a1, a2, a3, a4)  D[ (a1)*(ldD1)+(a2)*(ldD2)+(a3)*(ldD3)+(a4) ]
 #define Frow(a1, a2, a3, a4)  F[ (a1)*(ldF1)+(a2)*(ldF2)+(a3)*(ldF3)+(a4) ]
 #define Yrow(a1, a2, a3, a4)  Y[ (a1)*(ldY1)+(a2)*(ldY2)+(a3)*(ldY3)+(a4) ]
 #define drow(a1, a2)        (( fh <= a1 && a1 < oh && fw <= a2 && a2 < ow ) ? Drow(in, ic, hh + a1 - fh, ww + a2 - fw) : 0.0)
 #define Mprow(a1, a2)       Mrow(a2, a1, ik, in * tile_h * tile_w + ih * tile_w + iw)
-
-void conv_winograd_4x4_3x3_sse_fp32_nchw
 #endif
-        (int m, int r, int n, int k, int c,
-         int hi, int wi, int kh, int kw,
-         int vpadding, int hpadding,
-         float *D, int ldD1, int ldD2, int ldD3,
-         float *F, int ldF1, int ldF2, int ldF3,
-         float *Y, int ldY1, int ldY2, int ldY3,
-         float *biases, float *Bt, float *G, float *At,
-         float *U, float *V, float *M,
-         const char relu, const char bn,
-         float *running_mean, float *inv_std,
-         float *gamma, float *beta) {
+
+#ifdef TENSOR_FORMAT_NHWC
+void conv_winograd_4x4_3x3_sse_fp32_nhwc_pre
+#else
+void conv_winograd_4x4_3x3_sse_fp32_nchw_pre
+#endif
+        (int m, int r, int n, int k, int c, int kh, int kw,
+         float *F, int ldF1, int ldF2, int ldF3, float *U) {
     m = 4;
     r = 3;
     const int t = m + r - 1;    // Winograd input tile size: t x t
@@ -83,54 +77,27 @@ void conv_winograd_4x4_3x3_sse_fp32_nchw
     }
 
     // Quick return if possible
-    if ((n == 0) || (k == 0) || (c == 0) ||
-        (hi == 0) || (wi == 0) ||
+    if ((k == 0) || (c == 0) ||
         (kh == 0) || (kw == 0))
         return;
 
-    int tile_h, tile_w, ik, ic, in, ih, iw, hh, ww, hh_, ww_, fh, fw, oh, ow,
-            ldU1, ldU2, ldU3,
-            ldV1, ldV2, ldV3,
-            ldM1, ldM2, ldM3,
-            i, j, ho, wo, e, v;
-    float *Fptr,
-            U04, U14, U24, U34, U44, U54,
-            U05, U15, U25, U35, U45, U55,
-            W44, W45, W54, W55;
-    __m128 F0, F1, F2,
-            d0, d1, d2, d3, d4, d5,
+    int ik, ic, ldU1, ldU2, ldU3, i, j;
+    float   U04, U14, U24, U34, U44, U54,
+            U05, U15, U25, U35, U45, U55;
+    __m128  F0, F1, F2,
             U0, U1, U2, U3, U4, U5,
-            M0, M1, M2, M3, M4, M5,
-            W0, W1, W2, W3, W4, W5,
-            Z0, Z1, Z2, Z3,
-            W4_, W5_,
-            zeros = _mm_set_ps(0.0, 0.0, 0.0, 0.0);
-#ifdef DEBUG
-    double      t1, t2, T1, T2, T3, T4;
-#endif
-
-    ho = (hi + 2 * vpadding - kh) / vstride + 1;
-    wo = (wi + 2 * hpadding - kw) / hstride + 1;
-
-    tile_h = ceil(((double) hi + 2 * vpadding - t) / s) + 1;
-    tile_w = ceil(((double) wi + 2 * hpadding - t) / s) + 1;
+            W0, W1, W2, W3, W4, W5;
 
     ldU3 = c;
     ldU2 = k * ldU3;
     ldU1 = t * ldU2;
 
-    ldV3 = (n * tile_h * tile_w);
-    ldV2 = c * ldV3;
-    ldV1 = t * ldV2;
-
-    ldM3 = (n * tile_h * tile_w);
-    ldM2 = k * ldM3;
-    ldM1 = t * ldM2;
-
 #ifdef DEBUG
+    double      t1, t2, T1;
     t1 = dclock();
 #endif
-#pragma omp parallel for collapse(2) private(ik, ic, Fptr, F0, F1, F2, W0, W1, W2, W3, W4, W5, U0, U1, U2, U3, U4, U5, U04, U05, U14, U15, U24, U25, U34, U35, U44, U45, U54, U55, i)
+
+#pragma omp parallel for collapse(2) private(ik, ic, F0, F1, F2, W0, W1, W2, W3, W4, W5, U0, U1, U2, U3, U4, U5, U04, U05, U14, U15, U24, U25, U34, U35, U44, U45, U54, U55, i) if ((k * c) > 1)
     for (ik = 0; ik < k; ik++)
         for (ic = 0; ic < c; ic++) {
             // U[..., ik, ic] = (G @ F[ik, ic, ...]) @ G.T
@@ -139,7 +106,6 @@ void conv_winograd_4x4_3x3_sse_fp32_nchw
             // but we load four to take advantage of vector instructions
             // This may generate a core dump if we try to access in an illegal position though.
             // The alternative is to load F2 scalar-wise. (There can be no problem with F0 and F1)
-            Fptr = &Frow(ik, ic, 0, 0);
             for (j = 0; j < 3; j++) {
                 F0[j] = Frow(ik, ic, 0, j);
                 F1[j] = Frow(ik, ic, 1, j);
@@ -236,9 +202,88 @@ void conv_winograd_4x4_3x3_sse_fp32_nchw
 #ifdef DEBUG
     t2 = dclock();
     T1 = t2 - t1;
+    float tot = T1;
+    printf("%12.8f\n", T1/tot*100);
+#endif
+}
+
+#ifdef TENSOR_FORMAT_NHWC
+void conv_winograd_4x4_3x3_sse_fp32_nhwc_post
+#else
+void conv_winograd_4x4_3x3_sse_fp32_nchw_post
+#endif
+        (int m, int r, int n, int k, int c,
+         int hi, int wi, int kh, int kw,
+         int vpadding, int hpadding,
+         float *D, int ldD1, int ldD2, int ldD3,
+         float *Y, int ldY1, int ldY2, int ldY3,
+         float *biases, float *U, float *V, float *M,
+         const char relu, const char bn,
+         float *running_mean, float *inv_std,
+         float *gamma, float *beta) {
+    m = 4;
+    r = 3;
+    const int t = m + r - 1;    // Winograd input tile size: t x t
+    const int s = m;            // Winograd sliding window stride: t - (r - 1) = m
+    const int vstride = 1, hstride = 1;  // Convolution stride needs to be 1
+
+    if ((kh != r) || (kw != r)) {
+        printf("*** Error: the kernel size for this version of Winograd is wrong!");
+        exit(-1);
+    }
+
+    // Quick return if possible
+    if ((n == 0) || (k == 0) || (c == 0) ||
+        (hi == 0) || (wi == 0) ||
+        (kh == 0) || (kw == 0))
+        return;
+
+    int tile_h, tile_w, ik, ic, in, ih, iw, hh, ww, hh_, ww_, fh, fw, oh, ow,
+            ldU1, ldU2, ldU3,
+            ldV1, ldV2, ldV3,
+            ldM1, ldM2, ldM3,
+            i, j, ho, wo, e, v;
+    float   U04, U14, U24, U34, U44, U54,
+            U05, U15, U25, U35, U45, U55,
+            W44, W45, W54, W55;
+    __m128  d0, d1, d2, d3, d4, d5,
+            U0, U1, U2, U3, U4, U5,
+            M0, M1, M2, M3, M4, M5,
+            W0, W1, W2, W3, W4, W5,
+            Z0, Z1, Z2, Z3,
+            W4_, W5_,
+            zeros = _mm_set_ps(0.0, 0.0, 0.0, 0.0);
+#ifdef DEBUG
+    double      t1, t2, T1, T2, T3, T4;
+#endif
+
+    ho = (hi + 2 * vpadding - kh) / vstride + 1;
+    wo = (wi + 2 * hpadding - kw) / hstride + 1;
+
+    tile_h = ceil(((double) hi + 2 * vpadding - t) / s) + 1;
+    tile_w = ceil(((double) wi + 2 * hpadding - t) / s) + 1;
+
+    ldU3 = c;
+    ldU2 = k * ldU3;
+    ldU1 = t * ldU2;
+
+    ldV3 = (n * tile_h * tile_w);
+    ldV2 = c * ldV3;
+    ldV1 = t * ldV2;
+
+    ldM3 = (n * tile_h * tile_w);
+    ldM2 = k * ldM3;
+    ldM1 = t * ldM2;
+
+#ifdef DEBUG
     t1 = dclock();
 #endif
-#pragma omp parallel for collapse(2) private(ic, ih, hh_, hh, fh, oh, iw, ww_, ww, fw, ow, d0, d1, d2, d3, d4, d5, W0, W1, W2, W3, W4, W5, W4_, W5_, U0, U1, U2, U3, U4, U5, U04, U05, U14, U15, U24, U25, U34, U35, U44, U45, U54, U55, i, j)
+#ifdef DEBUG
+    t2 = dclock();
+    T1 = t2 - t1;
+    t1 = dclock();
+#endif
+#pragma omp parallel for collapse(2) private(ic, ih, hh_, hh, fh, oh, iw, ww_, ww, fw, ow, d0, d1, d2, d3, d4, d5, W0, W1, W2, W3, W4, W5, W4_, W5_, U0, U1, U2, U3, U4, U5, U04, U05, U14, U15, U24, U25, U34, U35, U44, U45, U54, U55, i, j) if ((n * c) > 1)
     for (in = 0; in < n; in++)
         for (ic = 0; ic < c; ic++)
             for (ih = 0; ih < tile_h; ih++) {
@@ -246,12 +291,14 @@ void conv_winograd_4x4_3x3_sse_fp32_nchw
                 hh = max(hh_, 0);
                 fh = min(max(-hh_, 0), t);
                 oh = max(min(hi - hh, t), 0);
+                oh = oh < t ? oh + fh : oh;
 
                 for (iw = 0; iw < tile_w; iw++) {
                     ww_ = min(wi, iw * s - hpadding);
                     ww = max(ww_, 0);
                     fw = min(max(-ww_, 0), t);
                     ow = max(min(wi - ww, t), 0);
+                    ow = ow < t ? ow + fw : ow;
 
                     for (j = 0; j < 4; j++) {
                         d0[j] = (fh <= 0 && 0 < oh && fw <= j && j < ow) ? Drow(in, ic, hh + 0 - fh, ww + j - fw) : 0.0;
@@ -385,7 +432,7 @@ void conv_winograd_4x4_3x3_sse_fp32_nchw
     T3 = t2 - t1;
     t1 = dclock();
 #endif
-#pragma omp parallel for collapse(2) private(in, ik, ih, iw, M0, M1, M2, M3, M4, M5, W0, W1, W2, W3, W4, W5, W4_, W5_, Z0, Z1, Z2, Z3, hh, ww, i, j)
+#pragma omp parallel for collapse(2) private(in, ik, ih, iw, M0, M1, M2, M3, M4, M5, W0, W1, W2, W3, W4, W5, W4_, W5_, Z0, Z1, Z2, Z3, hh, ww, i, j) if ((n * k) > 1)
     for (in = 0; in < n; in++)
         for (ik = 0; ik < k; ik++)
             for (ih = 0; ih < tile_h; ih++)
@@ -485,7 +532,42 @@ void conv_winograd_4x4_3x3_sse_fp32_nchw
 #ifdef DEBUG
     t2 = dclock();
     T4 = t2 - t1;
-    float tot = T1 + T2 + T3 + T4;
-    printf("%12.8f %12.8f %12.8f %12.8f \n", T1/tot*100, T2/tot*100, T3/tot*100, T4/tot*100);
+    float tot = T2 + T3 + T4;
+    printf("%12.8f %12.8f %12.8f \n", T2/tot*100, T3/tot*100, T4/tot*100);
 #endif
+}
+
+#ifdef TENSOR_FORMAT_NHWC
+void conv_winograd_4x4_3x3_sse_fp32_nhwc
+#else
+void conv_winograd_4x4_3x3_sse_fp32_nchw
+#endif
+        (int m, int r, int n, int k, int c,
+         int hi, int wi, int kh, int kw,
+         int vpadding, int hpadding,
+         float *D, int ldD1, int ldD2, int ldD3,
+         float *F, int ldF1, int ldF2, int ldF3,
+         float *Y, int ldY1, int ldY2, int ldY3,
+         float *biases, float *Bt, float *G, float *At,
+         float *U, float *V, float *M,
+         const char relu, const char bn,
+         float *running_mean, float *inv_std,
+         float *gamma, float *beta) {
+
+#ifdef TENSOR_FORMAT_NHWC
+    conv_winograd_4x4_3x3_sse_fp32_nhwc_pre
+#else
+    conv_winograd_4x4_3x3_sse_fp32_nchw_pre
+#endif
+       (m, r, n, k, c, kh, kw, F, ldF1, ldF2, ldF3, U);
+
+#ifdef TENSOR_FORMAT_NHWC
+    conv_winograd_4x4_3x3_sse_fp32_nhwc_post
+#else
+    conv_winograd_4x4_3x3_sse_fp32_nchw_post
+#endif
+        (m, r, n, k, c, hi, wi, kh, kw, vpadding, hpadding,
+         D, ldD1, ldD2, ldD3, Y, ldY1, ldY2, ldY3,
+         biases, U, V, M, relu, bn, running_mean, inv_std,
+         gamma, beta);
 }
