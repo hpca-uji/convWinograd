@@ -137,7 +137,10 @@ int main(int argc, char *argv[]) {
     char test;
     char *variant;
     DTYPE *D, *F, *Y, *Yg, *U, *V, *M;
-    double t1, t2, time, time_alg, time_avx, time_avx512, tmin, error, nrm, tmp, errorthd, flops, GFLOPS, speedupavx_avg = 0, speedupavx512_avg = 0, cnt=0;
+    double t1, t2, time, time_alg, tmin, error, nrm, tmp, errorthd, flops, GFLOPS;
+#if __x86_64__ && __LP64__
+    double time_avx, time_avx512, speedupavx_avg = 0, speedupavx512_avg = 0, cnt=0;
+#endif
     int m, t, tmin_,
             nmin, nmax, nstep,
             kmin, kmax, kstep,
@@ -146,13 +149,11 @@ int main(int argc, char *argv[]) {
             wmin, wmax, wstep,
             rmin, rmax, rstep,
             smin, smax, sstep,
-            prmax, psmax, ret,
             tformat, tformatmin, tformatmax,
             n, k, c,
             h, w,
             r, s,
-            pr, ps,
-            in, ir, is, ic, ik, ih, iw,
+            in, ik, ih, iw,
             ldD1, ldD2, ldD3,
             ldF1, ldF2, ldF3,
             ldY1, ldY2, ldY3,
@@ -286,7 +287,6 @@ int main(int argc, char *argv[]) {
     if (test == 'T') printf("========");
     printf("\n");
     printf("#    variant     n     k     c     h     w    kh    kw  vpad  hpad  format   Time-SSE   Time-AVX  Time-AVX512  SSE/AVX  SSE/AVX512    GFLOPS     Error");
-   // printf("      WINGRD     1     1     1   110   110     3     3     1     1    NCHW   2.03e-04   1.60e-04     1.75e-04    1.27       1.16  1.07e+00  9.90e-08   [OK]");
     if (test == 'T') printf("  Status");
     printf("\n");
 #else
@@ -344,8 +344,7 @@ int main(int argc, char *argv[]) {
                             // for ( s=smin; s<=smax; s+=sstep ){
                             for (vpadding = vpaddingmin; vpadding <= vpaddingmax; vpadding += vpaddingstep) {
                                 for (hpadding = hpaddingmin; hpadding <= hpaddingmax; hpadding += hpaddingstep) {
-                                  //  for (tformat = tformatmin; tformat < tformatmax; tformat += 1) {
-                                    for (tformat = tformatmin; tformat < 1; tformat += 1) {
+                                    for (tformat = tformatmin; tformat < tformatmax; tformat += 1) {
                                         s = r;
                                         //hpadding = vpadding;
                                         // Generate random data
@@ -575,7 +574,7 @@ int main(int argc, char *argv[]) {
                                         speedupavx512_avg = (speedupavx512_avg * cnt + time_alg/time_avx512) / (cnt + 1);
                                         cnt++;
 #else
-                                        printf("      %6s %5d %5d %5d %5d %5d %5d %5d %5d %5d %7s %10.2e %10.2f %9.2e %9.2e",
+                                        printf("      %6s %5d %5d %5d %5d %5d %5d %5d %5d %5d %7s %10.2e %9.2f %9.2e",
                                                variant, n, k, c, h, w, r, s, vpadding, hpadding,
                                                (tformat == NCHW) ? "NCHW" : "NHWC", time, GFLOPS, error);
 #endif
@@ -605,7 +604,7 @@ int main(int argc, char *argv[]) {
     if (test == 'T')
         free(Yg);
     printf("# End of program...\n");
-    printf("# =======================================================================================================");
+    printf("# ========================================================================================================");
     if (test == 'T') printf("=======");
     printf("\n");
 #if __x86_64__ && __LP64__
