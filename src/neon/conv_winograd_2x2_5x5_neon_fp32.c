@@ -70,7 +70,7 @@ void conv_winograd_2x2_5x5_neon_fp32_nchw_pre
     }
 
     // Quick return if possible
-    if (k == 0) || (c == 0) ||
+    if ((k == 0) || (c == 0) ||
         (kh == 0) || (kw == 0))
         return;
 
@@ -82,7 +82,7 @@ void conv_winograd_2x2_5x5_neon_fp32_nchw_pre
     float32x4_t F0, F1, F2, F3, F4,
             U0, U1, U2, U3, U4, U5,
             W0, W1, W2, W3, W4, W5,
-            W4_, W5_:
+            W4_, W5_;
 
     ldU3 = c;
     ldU2 = k * ldU3;

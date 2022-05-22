@@ -72,7 +72,7 @@ void conv_winograd_3x3_2x2_neon_fp32_nchw_pre
 
     int ik, ic, ldU1, ldU2, ldU3, i, j;
     float32x2_t F0, F1,
-            W0_, W1_, W2_, W3_;
+            W0_, W1_, W2_, W3_,
             U0, U1, U2, U3,
             W0, W1, W2, W3;
 

@@ -141,7 +141,7 @@ void conv_winograd_2x2_3x3_neon_fp32_nchw_pre
 #endif
 }
 
-fdef TENSOR_FORMAT_NHWC
+#ifdef TENSOR_FORMAT_NHWC
 void conv_winograd_2x2_3x3_neon_fp32_nhwc_post
 #else
 void conv_winograd_2x2_3x3_neon_fp32_nchw_post

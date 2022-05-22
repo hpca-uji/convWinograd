@@ -72,8 +72,7 @@ void conv_winograd_4x4_3x3_neon_fp32_nchw_pre
     }
 
     // Quick return if possible
-    if ((n == 0) || (k == 0) || (c == 0) ||
-        (hi == 0) || (wi == 0) ||
+    if ((k == 0) || (c == 0) ||
         (kh == 0) || (kw == 0))
         return;
 
