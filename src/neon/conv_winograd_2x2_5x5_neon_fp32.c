@@ -204,9 +204,9 @@ void conv_winograd_2x2_5x5_neon_fp32_nchw_pre
 }
 
 #ifdef TENSOR_FORMAT_NHWC
-void conv_winograd_2x2_5x5_neon_fp32_nhwc_post
+void conv_winograd_2x2_5x5_neon_fp32_nhwc_kernel
 #else
-void conv_winograd_2x2_5x5_neon_fp32_nchw_post
+void conv_winograd_2x2_5x5_neon_fp32_nchw_kernel
 #endif
         (int m, int r, int n, int k, int c,
          int hi, int wi, int kh, int kw,
@@ -499,9 +499,9 @@ void conv_winograd_2x2_5x5_neon_fp32_nchw
          (m, r, n, k, c, kh, kw, F, ldF1, ldF2, ldF3, U);
 
 #ifdef TENSOR_FORMAT_NHWC
-    conv_winograd_2x2_5x5_neon_fp32_nhwc_post
+    conv_winograd_2x2_5x5_neon_fp32_nhwc_kernel
 #else
-    conv_winograd_2x2_5x5_neon_fp32_nchw_post
+    conv_winograd_2x2_5x5_neon_fp32_nchw_kernel
 #endif
         (m, r, n, k, c, hi, wi, kh, kw, vpadding, hpadding,
          D, ldD1, ldD2, ldD3, Y, ldY1, ldY2, ldY3,

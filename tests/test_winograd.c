@@ -72,6 +72,11 @@ extern double dclock();
                      float *running_mean, float *inv_std, \
                      float *gamma, float *beta
 
+#define ALLOC_ARGS   int m, int r, int n, int k, int c, \
+                     int hi, int wi, int kh, int kw, \
+                     int vpadding, int hpadding, \
+                     float **U, float **V, float **M
+
 #define CONV_PARAMS(v) m, r, n, k, c, \
                      h, w, r, s, \
                      vpadding, hpadding, \
@@ -121,6 +126,9 @@ extern void DECL_FUNC(2x2_5x5, VARIANTAVX512, nhwc);
 #define CALL_FUNC(v, a, f) CALL_FUNC2(v, a, f)
 extern void conv_winograd_fp32(CONV_ARGS);
 #endif
+
+extern void conv_winograd_workspace_alloc(ALLOC_ARGS);
+extern void conv_winograd_workspace_dealloc(DTYPE *U, DTYPE *V, DTYPE *M);
 
 #define NCHW 0
 #define NHWC 1
@@ -320,9 +328,12 @@ int main(int argc, char *argv[]) {
     tile_H = ceil(((double) hmax + 2 * vpaddingmax - tmin_) / m) + 1;
     tile_W = ceil(((double) wmax + 2 * hpaddingmax - tmin_) / m) + 1;
 
+    conv_winograd_workspace_alloc(2, 5, nmax, kmax, cmax, hmax, wmax, rmax, smax, vpaddingmax, hpaddingmax, &U, &V, &M); 
+    /*
     U = (DTYPE *) malloc(t * t * kmax * cmax * sizeof(DTYPE));
     V = (DTYPE *) malloc(t * t * cmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
     M = (DTYPE *) malloc(t * t * kmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
+    */
 
     if (test == 'T')
         Yg = (DTYPE *) malloc(nmax * kmax * homax * womax * sizeof(DTYPE));
@@ -597,9 +608,7 @@ int main(int argc, char *argv[]) {
     free(Y);
     free(D);
     free(F);
-    free(U);
-    free(V);
-    free(M);
+    conv_winograd_workspace_dealloc(U, V, M);
 
     if (test == 'T')
         free(Yg);
