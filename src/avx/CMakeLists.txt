@@ -5,8 +5,10 @@
 
 set(SOURCES
         conv_winograd_2x2_3x3_avx_fp32;
+        conv_winograd_4x4_3x3_avx_fp32;
         conv_winograd_2x2_5x5_avx_fp32;
         conv_winograd_2x2_3x3_avx512_fp32;
+        conv_winograd_4x4_3x3_avx512_fp32;
         conv_winograd_2x2_5x5_avx512_fp32;
         )
 

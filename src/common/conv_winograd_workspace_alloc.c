@@ -34,7 +34,7 @@
               int vpadding, int hpadding, \
               DTYPE **U, DTYPE **V, DTYPE **M
 
-#define DARGS DTYPE *U, DTYPE *V, DTYPE *M
+#define DARGS DTYPE **U, DTYPE **V, DTYPE **M
 
 #define DECL_FUNC_ALLOC2(v, m, r) \
     conv_winograd_ ## v ## _fp32_workspace_alloc(AARGS) { \
@@ -57,7 +57,7 @@ void conv_winograd_workspace_alloc(AARGS) {
 }
 
 void conv_winograd_workspace_dealloc(DARGS) {
-    free(U); free(V); free(M);
+    free(*U); free(*V); free(*M);
 }
 
 void DECL_FUNC_ALLOC(3x3_2x2, 3, 2);

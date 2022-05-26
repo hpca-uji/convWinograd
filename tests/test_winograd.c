@@ -325,8 +325,8 @@ int main(int argc, char *argv[]) {
     F = (DTYPE *) malloc(kmax * cmax * rmax * smax * sizeof(DTYPE));
     Y = (DTYPE *) malloc(nmax * kmax * homax * womax * sizeof(DTYPE));
 
-    tile_H = ceil(((double) hmax + 2 * vpaddingmax - tmin_) / m) + 1;
-    tile_W = ceil(((double) wmax + 2 * hpaddingmax - tmin_) / m) + 1;
+    tile_H = ceil(((double) hmax + 2 * vpaddingmax - t) / m) + 1;
+    tile_W = ceil(((double) wmax + 2 * hpaddingmax - t) / m) + 1;
 
     conv_winograd_workspace_alloc(2, 5, nmax, kmax, cmax, hmax, wmax, rmax, smax, vpaddingmax, hpaddingmax, &U, &V, &M); 
     /*
@@ -424,14 +424,14 @@ int main(int argc, char *argv[]) {
                                                     CALL_FUNC(3x3_2x2, VARIANT, nchw) :
                                                     CALL_FUNC(3x3_2x2, VARIANT, nhwc);
                                                 } else if (r == 3 && s == 3) {
-                                                    m = 2;
+                                                    // m = 2;
+                                                    // tformat == NCHW ?
+                                                    //   CALL_FUNC(2x2_3x3, VARIANT, nchw) :
+                                                    //   CALL_FUNC(2x2_3x3, VARIANT, nhwc);
+                                                    m = 4;
                                                     tformat == NCHW ?
-                                                    CALL_FUNC(2x2_3x3, VARIANT, nchw) :
-                                                    CALL_FUNC(2x2_3x3, VARIANT, nhwc);
-                                                    //  m = 4;
-                                                    //  tformat == NCHW ?
-                                                    //    CALL_FUNC(4x4_3x3, VARIANT, nchw) :
-                                                    //    CALL_FUNC(4x4_3x3, VARIANT, nhwc);
+                                                      CALL_FUNC(4x4_3x3, VARIANT, nchw) :
+                                                      CALL_FUNC(4x4_3x3, VARIANT, nhwc);
                                                 } else if (r == 5 && s == 5) {
                                                     m = 2;
                                                     tformat == NCHW ?
@@ -464,10 +464,14 @@ int main(int argc, char *argv[]) {
                                             // Winograd
                                             if (strcmp(variant, "WINGRD\0") == 0) {
                                                 if (r == 3 && s == 3) {
-                                                    m = 2;
+                                                    // m = 2;
+                                                    // tformat == NCHW ?
+                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX, nchw) :
+                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX, nhwc);
+                                                    m = 4;
                                                     tformat == NCHW ?
-                                                    CALL_FUNC(2x2_3x3, VARIANTAVX, nchw) :
-                                                    CALL_FUNC(2x2_3x3, VARIANTAVX, nhwc);
+                                                      CALL_FUNC(4x4_3x3, VARIANTAVX, nchw) :
+                                                      CALL_FUNC(4x4_3x3, VARIANTAVX, nhwc);
                                                 } else if (r == 5 && s == 5) {
                                                     m = 2;
                                                     tformat == NCHW ?
@@ -499,10 +503,14 @@ int main(int argc, char *argv[]) {
                                             // Winograd
                                             if (strcmp(variant, "WINGRD\0") == 0) {
                                                 if (r == 3 && s == 3) {
-                                                    m = 2;
+                                                    // m = 2;
+                                                    // tformat == NCHW ?
+                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX512, nchw) :
+                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX512, nhwc);
+                                                    m = 4;
                                                     tformat == NCHW ?
-                                                    CALL_FUNC(2x2_3x3, VARIANTAVX512, nchw) :
-                                                    CALL_FUNC(2x2_3x3, VARIANTAVX512, nhwc);
+                                                      CALL_FUNC(4x4_3x3, VARIANTAVX512, nchw) :
+                                                      CALL_FUNC(4x4_3x3, VARIANTAVX512, nhwc);
                                                 } else if (r == 5 && s == 5) {
                                                     m = 2;
                                                     tformat == NCHW ?
@@ -520,6 +528,7 @@ int main(int argc, char *argv[]) {
                                         }
                                         time_avx512 = time / nreps;
                                         if (nreps == 0) continue;
+
 #endif
 
                                         // Test result
@@ -608,7 +617,7 @@ int main(int argc, char *argv[]) {
     free(Y);
     free(D);
     free(F);
-    conv_winograd_workspace_dealloc(U, V, M);
+    conv_winograd_workspace_dealloc(&U, &V, &M);
 
     if (test == 'T')
         free(Yg);
