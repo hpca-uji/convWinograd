@@ -529,6 +529,7 @@ int main(int argc, char *argv[]) {
                                         time_avx512 = time / nreps;
                                         if (nreps == 0) continue;
 
+
 #endif
 
                                         // Test result
