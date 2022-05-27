@@ -597,7 +597,7 @@ int main(int argc, char *argv[]) {
 #else
                                         printf("      %6s %5d %5d %5d %5d %5d %5d %5d %5d %5d %7s %10.2e %9.2f %9.2e",
                                                variant, n, k, c, h, w, r, s, vpadding, hpadding,
-                                               (tformat == NCHW) ? "NCHW" : "NHWC", time, GFLOPS, error);
+                                               (tformat == NCHW) ? "NCHW" : "NHWC", time_alg, GFLOPS, error);
 #endif
                                         if (error < errorthd)
                                             printf("    [OK]");
