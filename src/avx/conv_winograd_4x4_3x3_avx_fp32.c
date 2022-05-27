@@ -84,7 +84,7 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
         return;
 
     int ik, ic, ldU1, ldU2, ldU3, i, j;
-    __m256  UX[8], WX[8];
+    __m256  UX[6], WX[8];
 
     ldU3 = c;
     ldU2 = k * ldU3;
@@ -94,9 +94,9 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
     double      t1, t2, T1;
     t1 = dclock();
 #endif
-/*
-    int fpt = 8 % r;
-    int ct = ceil((double) c / (fpt * fpt));
+
+    int fptw = max(1, 8 / r);
+    int ct = ceil((double) c / fptw);
  
 #pragma omp parallel for collapse(2) private(ik, ic, WX, UX, i) if ((k * ct) > 1)
     for (ik = 0; ik < k; ik++)
@@ -108,13 +108,14 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
             // This may generate a core dump if we try to access in an illegal position though.
             // The alternative is to load _F2 scalar-wise. (There can be no problem with _F0 and _F1)
 
-            // Load 4x4 blocks of 4x4 elements of M
-            int max_fhw = min(c - (ic*fpt*fpt), fpt*fpt), fhw;
+            // Load 4x4 blocks of 4x4 elements of F
+            int max_fw = min(c - (ic*fptw), fptw), fw;
 
-            for (fhw = 0; fhw < max_fhw; fhw++)
+            for (fw = 0; fw < max_fw; fw++)
                 for (i = 0; i < r; i++)
                     for (j = 0; j < r; j++)
-                        UX[(fhw/fpt)*r + i][(fhw%fpt)*r + j] = Frow(ik, ic*fpt*fpt + fhw, i, j);
+                        UX[i][fw*r + j] = Frow(ik, ic*fptw + fw, i, j);
+
             // We are doing extra flops here: each row has only 3 valid elements but we
             // use vector instructions that operate with 4 values each. For each row/vector register, the last entry
             // is actually garbage and, therefore, will not used in the subsequent "gemm", when accessing W
@@ -123,14 +124,12 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
             //      0.5,  0.5, 0.5,
             //      0.5, -0.5, 0.5,
             //      0.0,  0.0, 1.0];
-            for (i = 0; i < (int)ceil((double) max_fhw / fpt); i++) {
-                WX[i*t+0] = (float) (1.0 / 4.0) * UX[i*r+0];
-                WX[i*t+1] = (float) (1.0 / 6.0) * (-UX[i*r+0] - UX[i*r+1] - UX[i*r+2]);
-                WX[i*t+2] = WX[i*t+1] + (float) (2.0 / 6.0) * UX[i*r+1];
-                WX[i*t+3] = (float) (1.0 / 24.0) * UX[i*r+0] + (float) (1.0 / 12.0) * UX[i*r+1] + (float) (1.0 / 6.0) * UX[i*r+2];
-                WX[i*t+4] = WX[i*t+3] - (float) (2.0 / 12.0) * UX[i*r+1];
-                WX[i*t+5] = UX[i*r+2];
-            }
+            WX[0] = (float) (1.0 / 4.0) * UX[0];
+            WX[1] = (float) (1.0 / 6.0) * (-UX[0] - UX[1] - UX[2]);
+            WX[2] = WX[1] + (float) (2.0 / 6.0) * UX[1];
+            WX[3] = (float) (1.0 / 24.0) * UX[0] + (float) (1.0 / 12.0) * UX[1] + (float) (1.0 / 6.0) * UX[2];
+            WX[4] = WX[3] - (float) (2.0 / 12.0) * UX[1];
+            WX[5] = UX[2];
 
             // Transpose Wk so that
             // W0, W1, W2, W3 now contain the columns of the previous Wk
@@ -139,23 +138,21 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
             _MM_TRANSPOSE8_PS(WX[0], WX[1], WX[2], WX[3], WX[4], WX[5], WX[6], WX[7]);
 
             // Ui  = G_row(i)  *  [ _W0,_W1,_W2 ] (rows of W/cols of W before transposition)
-            for (fhw = 0; fhw < (max_fhw > 1 ? 2 : 1); fhw++) {
-                UX[0] = (float) (1.0 / 4.0) * WX[fhw*r+0];
-                UX[1] = (float) (1.0 / 6.0) * (-WX[fhw*r+0] - WX[fhw*r+1] - WX[fhw*r+2]);
-                UX[2] = UX[1] + (float) (2.0 / 6.0) * WX[fhw*r+1];
-                UX[3] = (float) (1.0 / 24.0) * WX[fhw*r+0] + (float) (1.0 / 12.0) * WX[fhw*r+1] + (float) (1.0 / 6.0) * WX[fhw*r+2];
-                UX[4] = UX[3] - (float) (2.0 / 12.0) * WX[fhw*r+1];
-                UX[5] = WX[fhw*r+2];
+            for (fw = 0; fw < max_fw; fw++) {
+                UX[0] = (float) (1.0 / 4.0) * WX[fw*r+0];
+                UX[1] = (float) (1.0 / 6.0) * (-WX[fw*r+0] - WX[fw*r+1] - WX[fw*r+2]);
+                UX[2] = UX[1] + (float) (2.0 / 6.0) * WX[fw*r+1];
+                UX[3] = (float) (1.0 / 24.0) * WX[fw*r+0] + (float) (1.0 / 12.0) * WX[fw*r+1] + (float) (1.0 / 6.0) * WX[fw*r+2];
+                UX[4] = UX[3] - (float) (2.0 / 12.0) * WX[fw*r+1];
+                UX[5] = WX[fw*r+2];
 
-                int max_fww = ceil((double) max_fhw / fpt) - (fhw > 0 ? max_fhw % fpt : 0), fww;
                 // Scatter result in appropriate entries of U
                 for (i = 0; i < t; i++)
-                    for (fww = 0; fww < max_fww; fww++)
-                        for (j = 0; j < t; j++)
-                             Urow(j, i, ik, (ic*fpt*fpt) + fww*fpt + fhw) = UX[i][fww * t + j];
+                    for (j = 0; j < t; j++)
+                        Urow(j, i, ik, (ic*fptw) + fw) = UX[i][j];
             }
         }
-*/
+/*
 #pragma omp parallel for collapse(2) private(ik, ic, UX, WX, i, j) if ((k * c) > 1)
     for (ik = 0; ik < k; ik++)
         for (ic = 0; ic < c; ic++) {
@@ -219,6 +216,7 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
                 for (j = 0; j < t; j++)
                     Urow(i, j, ik, ic) = UX[j][i];
         }
+*/
 #ifdef DEBUG
     t2 = dclock();
     T1 = t2 - t1;

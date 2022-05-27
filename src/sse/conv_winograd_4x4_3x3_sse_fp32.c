@@ -198,7 +198,6 @@ void conv_winograd_4x4_3x3_sse_fp32_nchw_pre
             Urow(5, 4, ik, ic) = U45;
             Urow(5, 5, ik, ic) = U55;
         }
-
 #ifdef DEBUG
     t2 = dclock();
     T1 = t2 - t1;
