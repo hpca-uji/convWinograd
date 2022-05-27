@@ -95,8 +95,9 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
     t1 = dclock();
 #endif
 
-    int fptw = max(1, 8 / r);
-    int ct = ceil((double) c / fptw);
+    int fth = 1;
+    int ftw = max(1, 8 / r);
+    int ct = ceil((double) c / (fth*ftw));
  
 #pragma omp parallel for collapse(2) private(ik, ic, WX, UX, i) if ((k * ct) > 1)
     for (ik = 0; ik < k; ik++)
@@ -109,12 +110,12 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
             // The alternative is to load _F2 scalar-wise. (There can be no problem with _F0 and _F1)
 
             // Load 4x4 blocks of 4x4 elements of F
-            int max_fw = min(c - (ic*fptw), fptw), fw;
+            int max_fhw = min(c - (ic*fth*ftw), fth*ftw), fhw, fh, fw;
 
-            for (fw = 0; fw < max_fw; fw++)
+            for (fhw = 0; fhw < max_fhw; fhw++)
                 for (i = 0; i < r; i++)
                     for (j = 0; j < r; j++)
-                        UX[i][fw*r + j] = Frow(ik, ic*fptw + fw, i, j);
+                        UX[(fhw/ftw)*r + i][(fhw%ftw)*r + j] = Frow(ik, ic*fth*ftw + fhw, i, j);
 
             // We are doing extra flops here: each row has only 3 valid elements but we
             // use vector instructions that operate with 4 values each. For each row/vector register, the last entry
@@ -124,12 +125,14 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
             //      0.5,  0.5, 0.5,
             //      0.5, -0.5, 0.5,
             //      0.0,  0.0, 1.0];
-            WX[0] = (float) (1.0 / 4.0) * UX[0];
-            WX[1] = (float) (1.0 / 6.0) * (-UX[0] - UX[1] - UX[2]);
-            WX[2] = WX[1] + (float) (2.0 / 6.0) * UX[1];
-            WX[3] = (float) (1.0 / 24.0) * UX[0] + (float) (1.0 / 12.0) * UX[1] + (float) (1.0 / 6.0) * UX[2];
-            WX[4] = WX[3] - (float) (2.0 / 12.0) * UX[1];
-            WX[5] = UX[2];
+            for (i = 0; i < min(ceil((double) max_fhw / ftw), fth); i++) {
+                WX[i*t+0] = (float) (1.0 / 4.0) * UX[i*r+0];
+                WX[i*t+1] = (float) (1.0 / 6.0) * (-UX[i*r+0] - UX[i*r+1] - UX[i*r+2]);
+                WX[i*t+2] = WX[i*t+1] + (float) (2.0 / 6.0) * UX[i*r+1];
+                WX[i*t+3] = (float) (1.0 / 24.0) * UX[i*r+0] + (float) (1.0 / 12.0) * UX[i*r+1] + (float) (1.0 / 6.0) * UX[i*r+2];
+                WX[i*t+4] = WX[i*t+3] - (float) (2.0 / 12.0) * UX[i*r+1];
+                WX[i*t+5] = UX[i*r+2];
+            }
 
             // Transpose Wk so that
             // W0, W1, W2, W3 now contain the columns of the previous Wk
@@ -137,8 +140,9 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
             // and it will not be used in the subsequent operations
             _MM_TRANSPOSE8_PS(WX[0], WX[1], WX[2], WX[3], WX[4], WX[5], WX[6], WX[7]);
 
+            int rem_fhw = 0;
             // Ui  = G_row(i)  *  [ _W0,_W1,_W2 ] (rows of W/cols of W before transposition)
-            for (fw = 0; fw < max_fw; fw++) {
+            for (fw = 0; fw < min(max_fhw, ftw); fw++) {
                 UX[0] = (float) (1.0 / 4.0) * WX[fw*r+0];
                 UX[1] = (float) (1.0 / 6.0) * (-WX[fw*r+0] - WX[fw*r+1] - WX[fw*r+2]);
                 UX[2] = UX[1] + (float) (2.0 / 6.0) * WX[fw*r+1];
@@ -146,10 +150,13 @@ void conv_winograd_4x4_3x3_avx_fp32_nchw_pre
                 UX[4] = UX[3] - (float) (2.0 / 12.0) * WX[fw*r+1];
                 UX[5] = WX[fw*r+2];
 
+                int fhw = min(max_fhw - rem_fhw, fth);
+                rem_fhw += fhw;
                 // Scatter result in appropriate entries of U
-                for (i = 0; i < t; i++)
-                    for (j = 0; j < t; j++)
-                        Urow(j, i, ik, (ic*fptw) + fw) = UX[i][j];
+                for (fh = 0; fh < fhw; fh++)
+                    for (i = 0; i < t; i++)
+                        for (j = 0; j < t; j++)
+                            Urow(j, i, ik, (ic*fth*ftw) + fh*ftw + fw) = UX[i][fh * t + j];
             }
         }
 /*
