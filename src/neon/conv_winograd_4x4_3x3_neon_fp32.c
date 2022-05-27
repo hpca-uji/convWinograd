@@ -291,12 +291,14 @@ void conv_winograd_4x4_3x3_neon_fp32_nchw_kernel
                 hh = max(hh_, 0);
                 fh = min(max(-hh_, 0), t);
                 oh = max(min(hi - hh, t), 0);
+                oh = oh < t ? oh + fh : oh;
 
                 for (iw = 0; iw < tile_w; iw++) {
                     ww_ = min(wi, iw * s - hpadding);
                     ww = max(ww_, 0);
                     fw = min(max(-ww_, 0), t);
                     ow = max(min(wi - ww, t), 0);
+                    ow = ow < t ? ow + fw : ow;
 
                     for (j = 0; j < 4; j++) {
                         d0[j] = (fh <= 0 && 0 < oh && fw <= j && j < ow) ? Drow(in, ic, hh + 0 - fh, ww + j - fw) : 0.0;
