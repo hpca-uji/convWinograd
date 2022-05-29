@@ -34,6 +34,13 @@
               int vpadding, int hpadding, \
               DTYPE **U, DTYPE **V, DTYPE **M
 
+#define AARGSPRE int m, int r, int k, int c, DTYPE **U
+
+#define AARGSKERNEL int m, int r, int n, int k, int c, \
+              int hi, int wi, int kh, int kw, \
+              int vpadding, int hpadding, \
+              DTYPE **V, DTYPE **M
+
 #define DARGS DTYPE **U, DTYPE **V, DTYPE **M
 
 #define DECL_FUNC_ALLOC2(v, m, r) \
@@ -47,11 +54,23 @@
 void conv_winograd_workspace_alloc(AARGS) {
     int t = m + r - 1;
     int s = m;
-
     int tile_h = ceil(((double) hi + 2 * vpadding - t) / s) + 1;
     int tile_w = ceil(((double) wi + 2 * hpadding - t) / s) + 1;
-
     *U = (DTYPE *) malloc(t * t * k * c * sizeof(DTYPE));
+    *V = (DTYPE *) malloc(t * t * c * (n * tile_h * tile_w) * sizeof(DTYPE));
+    *M = (DTYPE *) malloc(t * t * k * (n * tile_h * tile_w) * sizeof(DTYPE));
+}
+
+void conv_winograd_workspace_alloc_pre(AARGSPRE) {
+    int t = m + r - 1;
+    *U = (DTYPE *) malloc(t * t * k * c * sizeof(DTYPE));
+}
+
+void conv_winograd_workspace_alloc_kernel(AARGSKERNEL) {
+    int t = m + r - 1;
+    int s = m;
+    int tile_h = ceil(((double) hi + 2 * vpadding - t) / s) + 1;
+    int tile_w = ceil(((double) wi + 2 * hpadding - t) / s) + 1;
     *V = (DTYPE *) malloc(t * t * c * (n * tile_h * tile_w) * sizeof(DTYPE));
     *M = (DTYPE *) malloc(t * t * k * (n * tile_h * tile_w) * sizeof(DTYPE));
 }

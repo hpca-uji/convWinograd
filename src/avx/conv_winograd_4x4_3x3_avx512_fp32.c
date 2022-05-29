@@ -150,8 +150,8 @@ void conv_winograd_4x4_3x3_avx512_fp32_nchw_pre
                 UX[5] = WX[fhw*r+2];
 
                 int max_fww = ceil((double) max_fhw / fpt) - (fhw > 0 ? max_fhw % fpt : 0), fww;
-                // Scatter result in appropriate entries of U
 
+                // Scatter result in appropriate entries of U
                 for (i = 0; i < t; i++)
                     for (fww = 0; fww < max_fww; fww++)
                         for (j = 0; j < t; j++)
