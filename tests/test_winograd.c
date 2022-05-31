@@ -325,26 +325,18 @@ int main(int argc, char *argv[]) {
     F = (DTYPE *) malloc(kmax * cmax * rmax * smax * sizeof(DTYPE));
     Y = (DTYPE *) malloc(nmax * kmax * homax * womax * sizeof(DTYPE));
 
-    tile_H = ceil(((double) hmax + 2 * vpaddingmax - t) / m) + 1;
-    tile_W = ceil(((double) wmax + 2 * hpaddingmax - t) / m) + 1;
-
-    conv_winograd_workspace_alloc(2, 5, nmax, kmax, cmax, hmax, wmax, rmax, smax, vpaddingmax, hpaddingmax, &U, &V, &M); 
-    /*
-    U = (DTYPE *) malloc(t * t * kmax * cmax * sizeof(DTYPE));
-    V = (DTYPE *) malloc(t * t * cmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
-    M = (DTYPE *) malloc(t * t * kmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
-    */
-
     if (test == 'T')
         Yg = (DTYPE *) malloc(nmax * kmax * homax * womax * sizeof(DTYPE));
 
 #if defined(FP16)
     errorthd = 1.0e-3;
 #elif defined(FP32)
-    errorthd = 1.0e-6;
+    errorthd = 1.0e-5;
 #elif defined(FP64)
     errorthd = 1.0e-14;
 #endif
+
+//#define m2r3
 
     for (n = nmin; n <= nmax; n += nstep) {
         for (k = kmin; k <= kmax; k += kstep) {
@@ -362,6 +354,15 @@ int main(int argc, char *argv[]) {
                                         // printf("# -->Generate data\n"); fflush(stdout);
                                         ho = (h + 2 * vpadding - r) / 1 + 1;
                                         wo = (w + 2 * hpadding - s) / 1 + 1;
+#if defined(m2r3)
+                                        m = 2;
+#else
+                                        m = 4;
+#endif
+                                        t = m + r - 1;
+                                        tile_H = ceil(((double) h + 2 * vpadding - t) / m) + 1;
+                                        tile_W = ceil(((double) w + 2 * hpadding - t) / m) + 1;
+                                        conv_winograd_workspace_alloc(m, r, n, k, c, h, w, r, s, vpadding, hpadding, &U, &V, &M);
 
                                         if (tformat == NCHW) {
                                             // NCHW
@@ -424,14 +425,17 @@ int main(int argc, char *argv[]) {
                                                     CALL_FUNC(3x3_2x2, VARIANT, nchw) :
                                                     CALL_FUNC(3x3_2x2, VARIANT, nhwc);
                                                 } else if (r == 3 && s == 3) {
-                                                    // m = 2;
-                                                    // tformat == NCHW ?
-                                                    //   CALL_FUNC(2x2_3x3, VARIANT, nchw) :
-                                                    //   CALL_FUNC(2x2_3x3, VARIANT, nhwc);
+#if defined(m2r3)
+                                                    m = 2;
+                                                    tformat == NCHW ?
+                                                    CALL_FUNC(2x2_3x3, VARIANT, nchw) :
+                                                    CALL_FUNC(2x2_3x3, VARIANT, nhwc);
+#else
                                                     m = 4;
                                                     tformat == NCHW ?
-                                                      CALL_FUNC(4x4_3x3, VARIANT, nchw) :
-                                                      CALL_FUNC(4x4_3x3, VARIANT, nhwc);
+                                                    CALL_FUNC(4x4_3x3, VARIANT, nchw) :
+                                                    CALL_FUNC(4x4_3x3, VARIANT, nhwc);
+#endif
                                                 } else if (r == 5 && s == 5) {
                                                     m = 2;
                                                     tformat == NCHW ?
@@ -451,11 +455,12 @@ int main(int argc, char *argv[]) {
                                         if (nreps == 0) continue;
 
 #if __x86_64__ && __LP64__
+                                        memset(U, 0, t * t * k * c * sizeof(DTYPE));
+                                        memset(V, 0, t * t * c * (n * tile_H * tile_W) * sizeof(DTYPE));
+                                        memset(M, 0, t * t * k * (n * tile_H * tile_W) * sizeof(DTYPE));
                                         memset(Y, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
-                                        memset(Yg, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
-                                        memset(U, 0, t * t * kmax * cmax * sizeof(DTYPE));
-                                        memset(V, 0, t * t * cmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
-                                        memset(M, 0, t * t * kmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
+                                        if (test == 'T')
+                                            memset(Yg, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
 
                                         time = 0.0;
                                         t1 = dclock();
@@ -464,14 +469,17 @@ int main(int argc, char *argv[]) {
                                             // Winograd
                                             if (strcmp(variant, "WINGRD\0") == 0) {
                                                 if (r == 3 && s == 3) {
-                                                    // m = 2;
-                                                    // tformat == NCHW ?
-                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX, nchw) :
-                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX, nhwc);
+#if defined(m2r3)
+                                                    m = 2;
+                                                    tformat == NCHW ?
+                                                    CALL_FUNC(2x2_3x3, VARIANT, nchw) :
+                                                    CALL_FUNC(2x2_3x3, VARIANT, nhwc);
+#else
                                                     m = 4;
                                                     tformat == NCHW ?
-                                                      CALL_FUNC(4x4_3x3, VARIANTAVX, nchw) :
-                                                      CALL_FUNC(4x4_3x3, VARIANTAVX, nhwc);
+                                                    CALL_FUNC(4x4_3x3, VARIANT, nchw) :
+                                                    CALL_FUNC(4x4_3x3, VARIANT, nhwc);
+#endif
                                                 } else if (r == 5 && s == 5) {
                                                     m = 2;
                                                     tformat == NCHW ?
@@ -490,11 +498,12 @@ int main(int argc, char *argv[]) {
                                         time_avx = time / nreps;
                                         if (nreps == 0) continue;
 
+                                        memset(U, 0, t * t * k * c * sizeof(DTYPE));
+                                        memset(V, 0, t * t * c * (n * tile_H * tile_W) * sizeof(DTYPE));
+                                        memset(M, 0, t * t * k * (n * tile_H * tile_W) * sizeof(DTYPE));
                                         memset(Y, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
-                                        memset(Yg, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
-                                        memset(U, 0, t * t * kmax * cmax * sizeof(DTYPE));
-                                        memset(V, 0, t * t * cmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
-                                        memset(M, 0, t * t * kmax * (nmax * tile_H * tile_W) * sizeof(DTYPE));
+                                        if (test == 'T')
+                                            memset(Yg, 0, nmax * kmax * homax * womax * sizeof(DTYPE));
 
                                         time = 0.0;
                                         t1 = dclock();
@@ -503,14 +512,17 @@ int main(int argc, char *argv[]) {
                                             // Winograd
                                             if (strcmp(variant, "WINGRD\0") == 0) {
                                                 if (r == 3 && s == 3) {
-                                                    // m = 2;
-                                                    // tformat == NCHW ?
-                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX512, nchw) :
-                                                    //   CALL_FUNC(2x2_3x3, VARIANTAVX512, nhwc);
+#if defined(m2r3)
+                                                    m = 2;
+                                                    tformat == NCHW ?
+                                                    CALL_FUNC(2x2_3x3, VARIANT, nchw) :
+                                                    CALL_FUNC(2x2_3x3, VARIANT, nhwc);
+#else
                                                     m = 4;
                                                     tformat == NCHW ?
-                                                      CALL_FUNC(4x4_3x3, VARIANTAVX512, nchw) :
-                                                      CALL_FUNC(4x4_3x3, VARIANTAVX512, nhwc);
+                                                    CALL_FUNC(4x4_3x3, VARIANT, nchw) :
+                                                    CALL_FUNC(4x4_3x3, VARIANT, nhwc);
+#endif
                                                 } else if (r == 5 && s == 5) {
                                                     m = 2;
                                                     tformat == NCHW ?
@@ -528,10 +540,7 @@ int main(int argc, char *argv[]) {
                                         }
                                         time_avx512 = time / nreps;
                                         if (nreps == 0) continue;
-
-
 #endif
-
                                         // Test result
                                         if (test == 'T') {
                                             convDirect(n, k, c,
@@ -605,6 +614,7 @@ int main(int argc, char *argv[]) {
                                             printf("  ******");
                                         printf("\n");
 
+                                        conv_winograd_workspace_dealloc(&U, &V, &M);
                                     }
                                 }
                             }
@@ -618,7 +628,6 @@ int main(int argc, char *argv[]) {
     free(Y);
     free(D);
     free(F);
-    conv_winograd_workspace_dealloc(&U, &V, &M);
 
     if (test == 'T')
         free(Yg);
