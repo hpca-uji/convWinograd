@@ -27,14 +27,6 @@
 
 #include "../cblas_headers.h"
 
-#ifdef C_AVX_FOUND
-
-#include <xmmintrin.h>
-
-#else
-#warning No AVX support - will not compile
-#endif
-
 extern double dclock();
 
 #define min(a, b)     ( (a) > (b) ? (b) : (a) )
