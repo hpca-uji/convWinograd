@@ -5,6 +5,7 @@
 
 set(SOURCES
         conv_winograd_fp32;
+        conv_winograd_2x2_3x3_native_fp32;
         conv_winograd_workspace_alloc;
         )
 
