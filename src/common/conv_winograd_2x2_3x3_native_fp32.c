@@ -261,14 +261,12 @@ void conv_winograd_2x2_3x3_native_fp32_nchw_kernel
                     // Therefore, we are actually computing the following:
                     //     Z = (At @ M[in * tile_h * tile_w + ih * tile_w + iw, ik, ...]) @ At.T
 
+#define mrow(ii, jj) Mrow(ii, jj, ik, in * tile_h * tile_w + ih * tile_w + iw)
+
                     // Load rows of M: 4x4
                     for (j = 0; j < 4; j++) {
-                        W[0][j] = Mrow(j, 0, ik, in * tile_h * tile_w + ih * tile_w + iw) + 
-                                  Mrow(j, 1, ik, in * tile_h * tile_w + ih * tile_w + iw) + 
-                                  Mrow(j, 2, ik, in * tile_h * tile_w + ih * tile_w + iw);
-                        W[1][j] = Mrow(j, 1, ik, in * tile_h * tile_w + ih * tile_w + iw) - 
-                                  Mrow(j, 2, ik, in * tile_h * tile_w + ih * tile_w + iw) - 
-                                  Mrow(j, 3, ik, in * tile_h * tile_w + ih * tile_w + iw);
+                        W[0][j] = mrow(j, 0) + mrow(j, 1) + mrow(j, 2);
+                        W[1][j] = mrow(j, 1) - mrow(j, 2) - mrow(j, 3);
                     }
 
                     // In contrast with cases 1) and 2), in this case we do not use vector instructions for this second gemm as
